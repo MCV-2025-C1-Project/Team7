@@ -1,6 +1,6 @@
 # Setting up local development environment
-This package uses [uv](https://docs.astral.sh/uv/) for project management.
-You will need to install uv to develop this package.
+This repository uses [uv](https://docs.astral.sh/uv/) for project management.
+You will need to install uv to develop this project.
 
 First clone the repository:
 ```shell
