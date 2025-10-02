@@ -8,7 +8,7 @@ def retrieval(
     similarity: Callable[[np.ndarray, np.ndarray], float],
     top_k: int = 5,
 ) -> dict[int, list[tuple[int, float]]]:
-    '''
+    """
     Perform image retrieval by comparing query descriptors against a database of descriptors using a specified similarity function.
     Args:
         bbdd_descriptors: A dictionary mapping image indices to their descriptors in the database.
@@ -17,8 +17,8 @@ def retrieval(
         top_k: The number of top similar images to retrieve for each query.
     Returns:
         A dictionary mapping each query index to a list of tuples containing the top_k most similar database image indices and their similarity scores.
-    '''
-    
+    """
+
     # Compute similarities
     similarities = {}
     for query_index, query_descriptor in query_decriptors.items():

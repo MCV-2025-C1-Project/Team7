@@ -6,15 +6,16 @@ import pathlib
 from PIL import Image
 import pickle
 
+
 def grayscale_histogram(image: np.ndarray) -> np.ndarray:
-    '''
+    """
     Compute the grayscale histogram of an image.
     Args:
         image: A 2D numpy array representing a grayscale image.
     Returns:
         A 1D numpy array of length 256 representing the histogram.
-    '''
-    
+    """
+
     histogram = np.zeros(256, dtype=int)
     for pixel in image.flatten():
         histogram[pixel] += 1
@@ -22,14 +23,14 @@ def grayscale_histogram(image: np.ndarray) -> np.ndarray:
 
 
 def concat_rgb_histogram(image: np.ndarray) -> np.ndarray:
-    '''
+    """
     Compute the concatenated RGB histogram of an image.
     Args:
         image: A 3D numpy array representing an RGB image.
     Returns:
         A 1D numpy array of length 768 representing the concatenated histogram.
-    '''
-    
+    """
+
     r_hist = np.zeros(256, dtype=int)
     g_hist = np.zeros(256, dtype=int)
     b_hist = np.zeros(256, dtype=int)

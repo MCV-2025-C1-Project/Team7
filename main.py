@@ -18,12 +18,16 @@ from retrieval.base import retrieval
 def main():
     # BBDD descriptors
     pathlist = list(Path("./descriptor/BBDD").glob("*.jpg"))
-    bbdd_grayscale_descriptors = compute_descriptors(grayscale_histogram, pathlist, save_as_pkl=True)
+    bbdd_grayscale_descriptors = compute_descriptors(
+        grayscale_histogram, pathlist, save_as_pkl=True
+    )
     # bbdd_rgb_descriptors = compute_descriptors(concat_rgb_histogram, pathlist, save_as_pkl=True)
 
     # Query descriptors
     pathlist = list(Path("./descriptor/qsd1_w1").glob("*.jpg"))
-    query_grayscale_descriptors = compute_descriptors(grayscale_histogram, pathlist, save_as_pkl=True)
+    query_grayscale_descriptors = compute_descriptors(
+        grayscale_histogram, pathlist, save_as_pkl=True
+    )
     # query_rgb_descriptors = compute_descriptors(concat_rgb_histogram, pathlist, save_as_pkl=True)
 
     print("Retrieval using Grayscale Histograms and Euclidean Distance")
@@ -38,7 +42,9 @@ def main():
 
     print("Retrieval using Grayscale Histograms and Manhattan Distance")
     results = retrieval(
-        bbdd_grayscale_descriptors, query_grayscale_descriptors, compute_manhattan_distance
+        bbdd_grayscale_descriptors,
+        query_grayscale_descriptors,
+        compute_manhattan_distance,
     )
     results = sorted(results.items())
     for query_index, retrieved in results:
@@ -54,7 +60,9 @@ def main():
 
     print("Retrieval using Grayscale Histograms and Histogram Intersection")
     results = retrieval(
-        bbdd_grayscale_descriptors, query_grayscale_descriptors, compute_histogram_intersection
+        bbdd_grayscale_descriptors,
+        query_grayscale_descriptors,
+        compute_histogram_intersection,
     )
     results = sorted(results.items())
     for query_index, retrieved in results:
@@ -62,7 +70,9 @@ def main():
 
     print("Retrieval using Grayscale Histograms and Hellinger Distance")
     results = retrieval(
-        bbdd_grayscale_descriptors, query_grayscale_descriptors, compute_hellinger_distance
+        bbdd_grayscale_descriptors,
+        query_grayscale_descriptors,
+        compute_hellinger_distance,
     )
     results = sorted(results.items())
     for query_index, retrieved in results:
