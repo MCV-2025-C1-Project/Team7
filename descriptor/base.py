@@ -152,9 +152,9 @@ def compute_descriptors(
         
         rgb_multiple_smoothed = np.stack((red_channel_smoothed, green_channel_smoothed, blue_channel_smoothed), axis=-1)
         
-        r_equalized = equalize_channel(red_channel_smoothed)
-        g_equalized = equalize_channel(green_channel_smoothed)
-        b_equalized = equalize_channel(blue_channel_smoothed)
+        r_equalized = equalization(red_channel_smoothed)
+        g_equalized = equalization(green_channel_smoothed)
+        b_equalized = equalization(blue_channel_smoothed)
         
         rgb_equalized = np.stack((r_equalized, g_equalized, b_equalized), axis=-1)
         
