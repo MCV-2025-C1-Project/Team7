@@ -2,14 +2,9 @@ from collections.abc import Callable
 
 import numpy as np
 import tqdm
-import pathlib
-from PIL import Image, ImageOps
+from pathlib import Path
+from PIL import Image
 import pickle
-import matplotlib.pyplot as plt
-
-from filtering.linear import mean_filter
-from morphology.base import openning, closing
-from color.base import rgb2hsv
 
 def grayscale_histogram(image: np.ndarray) -> np.ndarray:
     """
@@ -88,8 +83,9 @@ def equalization(img: np.ndarray) -> np.ndarray:
 
 
 def compute_descriptors(
+    suffix: str,
     method: Callable[[np.ndarray], np.ndarray],
-    pathlist: list[pathlib.Path],
+    images: dict[str, np.ndarray],
     use_grayscale: bool = True,
     save_as_pkl: bool = False,
     overwrite_pkl: bool = False,
@@ -106,85 +102,22 @@ def compute_descriptors(
     Returns:
         A dictionary mapping image indices (extracted from filenames) to their computed descriptors.
     """
-
-    descriptors = {}
-    for img_path in tqdm.tqdm(pathlist):
-        pkl_path = img_path.with_suffix(".pkl")
-        if pkl_path.exists() and not overwrite_pkl:
-            with open(pkl_path, "rb") as f:
-                descriptor = pickle.load(f)
-            descriptors[int(img_path.stem.split("_")[-1])] = descriptor
-        else:
+    pkl_path = Path(__file__).parent / f"{suffix}-{method.__name__}-{('grayscale' if use_grayscale else 'rgb')}.pkl"
+    if pkl_path.exists() and not overwrite_pkl:
+        with open(pkl_path, "rb") as f:
+            descriptors = pickle.load(f)
+    else:
+        descriptors = {}
+        for imgname in tqdm.tqdm(images.keys(), desc="Computing descriptors"):
             if use_grayscale:
-                image = np.array(Image.open(img_path).convert("L"))
+                image = np.array(Image.open(imgname).convert("L"))
             else:
-                image = np.array(Image.open(img_path).convert("RGB"))
-            gray_image = np.array(ImageOps.grayscale(image))
-            plt.imshow(gray_image)
-            plt.title("gray Image")
-            plt.show()
-            
-            grayscale_smoothed = mean_filter(gray_image)
-            plt.imshow(grayscale_smoothed)
-            plt.title("gray smoothed Image")
-            plt.show()
-
-            rgb_image = np.array(image)
-            plt.imshow(rgb_image)
-            plt.title("RGB Image")
-            plt.show()
-
-            red_channel = rgb_image[:, :, 0]
-            green_channel = rgb_image[:, :, 1]
-            blue_channel = rgb_image[:, :, 2]
-            
-            red_channel_smoothed = mean_filter(red_channel)
-            green_channel_smoothed = mean_filter(green_channel)
-            blue_channel_smoothed = mean_filter(blue_channel)
-            rgb_single_smoothed = np.stack((red_channel_smoothed, green_channel_smoothed, blue_channel_smoothed), axis=-1)
-            
-            red_channel_smoothed = mean_filter(red_channel_smoothed)
-            red_channel_smoothed = mean_filter(red_channel_smoothed)
-            red_channel_smoothed = mean_filter(red_channel_smoothed)
-            
-            green_channel_smoothed = mean_filter(green_channel_smoothed)
-            green_channel_smoothed = mean_filter(green_channel_smoothed)
-            green_channel_smoothed = mean_filter(green_channel_smoothed)
-            
-            blue_channel_smoothed = mean_filter(blue_channel_smoothed)
-            blue_channel_smoothed = mean_filter(blue_channel_smoothed)
-            blue_channel_smoothed = mean_filter(blue_channel_smoothed)
-            
-            rgb_multiple_smoothed = np.stack((red_channel_smoothed, green_channel_smoothed, blue_channel_smoothed), axis=-1)
-            
-            r_equalized = equalization(red_channel_smoothed)
-            g_equalized = equalization(green_channel_smoothed)
-            b_equalized = equalization(blue_channel_smoothed)
-            
-            rgb_equalized = np.stack((r_equalized, g_equalized, b_equalized), axis=-1)
-            
-            plt.imshow(rgb_single_smoothed)
-            plt.title("RGB single smoothed Image")
-            plt.show()
-            
-            plt.imshow(rgb_multiple_smoothed)
-            plt.title("RGB multiple smoothed Image")
-            plt.show()
-
-            plt.imshow(rgb_equalized)
-            plt.title("RGB equalized Image")
-            plt.show()
-
-            hsv_image = rgb2hsv(rgb_multiple_smoothed)
-            plt.imshow(hsv_image)
-            plt.title("HSV smoothed Image")
-            plt.show()
-            
-            descriptor = method(grayscale_smoothed)
+                image = np.array(Image.open(imgname).convert("RGB"))
             descriptor = method(image)
-            descriptor_index = int(img_path.stem.split("_")[-1])
+            descriptor = method(image)
+            descriptor_index = int(imgname.split("_")[-1])
             descriptors[descriptor_index] = descriptor
-            if save_as_pkl:
-                with open(pkl_path, "wb") as f:
-                    pickle.dump(descriptor, f)
+        if save_as_pkl:
+            with open(pkl_path, "wb") as f:
+                pickle.dump(descriptors, f)
     return descriptors
