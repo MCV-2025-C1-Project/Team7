@@ -46,7 +46,9 @@ def concat_rgb_histogram(image: np.ndarray) -> np.ndarray:
 def compute_descriptors(
     method: Callable[[np.ndarray], np.ndarray],
     pathlist: list[pathlib.Path],
+    use_grayscale: bool = True,
     save_as_pkl: bool = False,
+    overwrite_pkl: bool = False,
 ) -> dict[int, np.ndarray]:
     """
     Compute descriptors for a list of image paths using the provided method. Loads from .pkl if available.
@@ -54,7 +56,9 @@ def compute_descriptors(
     Args:
         method: Callable function that accepts an image array and computes the descriptor (returned as a numpy array).
         pathlist: List of pathlib.Path objects pointing to the images.
-    save_as_pkl: Boolean flag to save computed descriptors as .pkl files.
+        use_grayscale: Boolean flag to convert images to grayscale before computing descriptors.
+        save_as_pkl: Boolean flag to save computed descriptors as .pkl files.
+        overwrite_pkl: Boolean flag to overwrite existing .pkl files if they already exist.
     Returns:
         A dictionary mapping image indices (extracted from filenames) to their computed descriptors.
     """
@@ -62,12 +66,15 @@ def compute_descriptors(
     descriptors = {}
     for img_path in tqdm.tqdm(pathlist):
         pkl_path = img_path.with_suffix(".pkl")
-        if pkl_path.exists():
+        if pkl_path.exists() and not overwrite_pkl:
             with open(pkl_path, "rb") as f:
                 descriptor = pickle.load(f)
             descriptors[int(img_path.stem.split("_")[-1])] = descriptor
         else:
-            image = np.array(Image.open(img_path))
+            if use_grayscale:
+                image = np.array(Image.open(img_path).convert("L"))
+            else:
+                image = np.array(Image.open(img_path).convert("RGB"))
             descriptor = method(image)
             descriptor_index = int(img_path.stem.split("_")[-1])
             descriptors[descriptor_index] = descriptor
