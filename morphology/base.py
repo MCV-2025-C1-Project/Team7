@@ -40,3 +40,9 @@ def erode(img: np.ndarray, kernel_size: int = 3) -> np.ndarray:
             out[y, x] = np.min(sliding_window)
             
     return out
+
+def openning(img: np.ndarray) -> np.ndarray:
+    return dilate(erode(img))
+
+def closing(img: np.ndarray) -> np.ndarray:
+    return erode(dilate(img))
