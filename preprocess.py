@@ -16,17 +16,8 @@ def preprocess_images(images: dict[str, np.ndarray]) -> dict[str, np.ndarray]:
         img_f[:, :, 2] *= g / mR
         img_bal = np.clip(img_f, 0, 255).astype(np.uint8)
 
-        # c) CLAHE sobre el canal V (millora contrast/brillantor de forma estable)
-        hsv = cv2.cvtColor(img_bal, cv2.COLOR_BGR2HSV)
-        V = hsv[:, :, 2]
-        clahe = cv2.createCLAHE(clipLimit=2.0, tileGridSize=(8, 8))
-        hsv[:, :, 2] = clahe.apply(V)
-        img_clahe = cv2.cvtColor(hsv, cv2.COLOR_HSV2BGR)
-
         # d) Suavitzat bilateral (treu soroll preservant vores i color)
-        img_smooth = cv2.bilateralFilter(img_clahe, d=7, sigmaColor=60, sigmaSpace=7)
+        img_smooth = cv2.blur(img_bal, (5,5))
 
-        images[img_name] = cv2.cvtColor(
-            img_smooth, cv2.COLOR_BGR2RGB
-        )  # <-- Transformar a RGB per la funció manual del rgb histogram
+        images[img_name] = img_smooth
     return images

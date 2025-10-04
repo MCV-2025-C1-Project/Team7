@@ -88,7 +88,7 @@ def rgb_histogram(image: np.array, bins=8) -> np.array:
 
     return hist
 
-def hsv_histogram_concat_manual(img_bgr: np.ndarray, bins=[16,8,8]) -> np.ndarray:
+def hsv_histogram_concat(img_bgr: np.ndarray, bins=[16,16,8]) -> np.ndarray:
     """
     Compute a 1D concatenated HSV histogram    
     Args:

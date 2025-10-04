@@ -5,6 +5,7 @@ import cv2
 from descriptors import (
     rgb_hist_hellinger,
     compute_descriptors,
+    hsv_histogram_concat,
 )
 from similarity import (
     compute_euclidean_distance,
@@ -41,7 +42,7 @@ def main():
     # TODO: Check if the histograms are computed correctly
     bbdd_rgb_descriptors = compute_descriptors(
         "bbdd",
-        rgb_hist_hellinger,
+        hsv_histogram_concat,
         bbdd_images,
         use_grayscale=False,
         save_as_pkl=True,
@@ -51,9 +52,10 @@ def main():
     # Repeate the same for Query descriptors
     pathlist = list(Path(Path(__file__).parent / "datasets" / "qsd1_w1").glob("*.jpg"))
     query_images = {img_path.stem: cv2.imread(str(img_path)) for img_path in pathlist}
+    query_images = preprocess_images(query_images)
     query_rgb_descriptors = compute_descriptors(
         "qsd1_w1",
-        rgb_hist_hellinger,
+        hsv_histogram_concat,
         query_images,
         use_grayscale=False,
         save_as_pkl=True,
