@@ -4,7 +4,7 @@ import numpy as np
 import tqdm
 from pathlib import Path
 import pickle
-
+import cv2
 
 def grayscale_histogram(image: np.ndarray) -> np.ndarray:
     """
@@ -65,6 +65,68 @@ def concat_rgb_histogram(image: np.ndarray) -> np.ndarray:
 
     return np.concatenate([r_hist, g_hist, b_hist])
 
+def rgb_histogram(image: np.array, bins=8) -> np.array:
+    """
+    Compute the 3D RGB histogram -> Can't use for week 1.
+    Args:
+        image: A 3D numpy array representing an RGB image.
+    Returns:
+        A 1D numpy array of length bins^3 representing the 3D histogram.
+    """
+    # Ensure uint8 input
+    img = image.astype(np.uint8)
+    
+    # Compute bin indices for each channel
+    bin_edges = np.linspace(0, 256, bins + 1, endpoint=True)
+    r_idx = np.digitize(img[:, :, 2].ravel(), bin_edges) - 1
+    g_idx = np.digitize(img[:, :, 1].ravel(), bin_edges) - 1
+    b_idx = np.digitize(img[:, :, 0].ravel(), bin_edges) - 1
+
+    flat_idx = b_idx * (bins * bins) + g_idx * bins + r_idx
+
+    hist = np.bincount(flat_idx, minlength=bins**3).astype(np.float32)
+
+    return hist
+
+def hsv_histogram_concat_manual(img_bgr: np.ndarray, bins=[16,8,8]) -> np.ndarray:
+    """
+    Compute a 1D concatenated HSV histogram    
+    Args:
+        img_bgr: A 3D numpy array representing an BGR image.
+    
+    Returns:
+        A 1D numpy array representing the concatenated histogram.
+    """
+    img_hsv = cv2.cvtColor(img_bgr.astype(np.uint8), cv2.COLOR_BGR2HSV)
+    h_bins = bins[0]
+    s_bins = bins[1]
+    v_bins = bins[2]
+
+    # --- H channel ---
+    H = img_hsv[:, :, 0].ravel()
+    H_bin_edges = np.linspace(0, 256, h_bins + 1)
+    H_idx = np.digitize(H, H_bin_edges) - 1
+    H_hist = np.zeros(h_bins, dtype=np.float32)
+    for idx in H_idx:
+        H_hist[idx] += 1
+
+    # --- S channel ---
+    S = img_hsv[:, :, 1].ravel()
+    S_bin_edges = np.linspace(0, 256, s_bins + 1)
+    S_idx = np.digitize(S, S_bin_edges) - 1
+    S_hist = np.zeros(s_bins, dtype=np.float32)
+    for idx in S_idx:
+        S_hist[idx] += 1
+
+    # --- V channel ---
+    V = img_hsv[:, :, 2].ravel()
+    V_bin_edges = np.linspace(0, 256, v_bins + 1)
+    V_idx = np.digitize(V, V_bin_edges) - 1
+    V_hist = np.zeros(v_bins, dtype=np.float32)
+    for idx in V_idx:
+        V_hist[idx] += 1
+
+    return np.concatenate([H_hist, S_hist, V_hist]).astype(np.float32)
 
 def cumsum(a):
     """
