@@ -20,7 +20,8 @@ def mean_average_precision_K(
         num_retrieved_relevant = 0
         precision_sum = 0.0
 
-        for k, img_index in enumerate(retrieved[:K], start=1):
+        for k, tuple_retrieval in enumerate(retrieved[:K], start=1):
+            img_index = tuple_retrieval[1]
             if img_index in relevant:
                 num_retrieved_relevant += 1
                 precision_sum += num_retrieved_relevant / k

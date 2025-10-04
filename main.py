@@ -3,7 +3,6 @@ import pickle
 import cv2
 
 from descriptors import (
-    rgb_hist_hellinger,
     compute_descriptors,
     hsv_histogram_concat,
 )
@@ -27,7 +26,7 @@ from preprocess import preprocess_images
 # 5) evaluate with mean average precision at K
 # 6) print results
 def main():
-    TOPK = 2
+    TOPK = 5
     # 1) BBDD image paths
     pathlist = list(Path(Path(__file__).parent / "datasets" / "BBDD").glob("*.jpg"))
 
@@ -35,11 +34,9 @@ def main():
     bbdd_images = {img_path.stem: cv2.imread(str(img_path)) for img_path in pathlist}
 
     # 2) Preprocess BBDD images (resize 256x256, color balance, contrast&brightness adjustment, smoothing)
-    # TODO: Check if preprocessing is doing all the steps correctly
     bbdd_images = preprocess_images(bbdd_images)
 
     # 3) Compute descriptors for BBDD images
-    # TODO: Check if the histograms are computed correctly
     bbdd_rgb_descriptors = compute_descriptors(
         "bbdd",
         hsv_histogram_concat,
@@ -66,28 +63,51 @@ def main():
     gt = pickle.load(open("./datasets/qsd1_w1/gt_corresps.pkl", "rb"))
 
     # 4) Retrieval and 5) Evaluation with mAP@K
-    # TODO: Check and compare what is different from cv2 compareHist and our implementation
-    # Maybe I'm doing something wrong in the comparison?
-    print("Retrieval using RGB Histograms + Hellinger normalization and X^2 Distance")
+    print(f"Retrieval using {hsv_histogram_concat.__name__} and Euclidean Distance")
+    results = retrieval(
+        bbdd_rgb_descriptors,
+        query_rgb_descriptors,
+        compute_euclidean_distance,
+        top_k=TOPK,
+    )
+    print(f"mAP@{TOPK}:", mean_average_precision_K(results, gt, K=TOPK))
+
+    print(f"Retrieval using {hsv_histogram_concat.__name__} and Manhattan Distance")
+    results = retrieval(
+        bbdd_rgb_descriptors,
+        query_rgb_descriptors,
+        compute_manhattan_distance,
+        top_k=TOPK,
+    )
+    print(f"mAP@{TOPK}:", mean_average_precision_K(results, gt, K=TOPK))
+
+    print(f"Retrieval using {hsv_histogram_concat.__name__} and X^2 Distance")
     results = retrieval(
         bbdd_rgb_descriptors, query_rgb_descriptors, compute_x2_distance, top_k=TOPK
     )
-    for query_index in range(len(query_rgb_descriptors)):
-        print(f"{query_index}: {results[query_index]}")
-    print("mAP@K:", mean_average_precision_K(results, gt, K=TOPK))
+    # for query_index in range(len(query_rgb_descriptors)):
+    #     print(f"{query_index}: {results[query_index]}")
+    print(f"mAP@{TOPK}:", mean_average_precision_K(results, gt, K=TOPK))
 
-    print(
-        "Retrieval using RGB Histograms + Hellinger normalization and Hellinger Distance"
+    print(f"Retrieval using {hsv_histogram_concat.__name__} and Histogram Intersection")
+    results = retrieval(
+        bbdd_rgb_descriptors,
+        query_rgb_descriptors,
+        compute_histogram_intersection,
+        top_k=TOPK,
     )
+    print(f"mAP@{TOPK}:", mean_average_precision_K(results, gt, K=TOPK))
+
+    print(f"Retrieval using {hsv_histogram_concat.__name__} and Hellinger Distance")
     results = retrieval(
         bbdd_rgb_descriptors,
         query_rgb_descriptors,
         compute_hellinger_distance,
         top_k=TOPK,
     )
-    for query_index in range(len(query_rgb_descriptors)):
-        print(f"{query_index}: {results[query_index]}")
-    print("mAP@K:", mean_average_precision_K(results, gt, K=TOPK))
+    # for query_index in range(len(query_rgb_descriptors)):
+    #     print(f"{query_index}: {results[query_index]}")
+    print(f"mAP@{TOPK}:", mean_average_precision_K(results, gt, K=TOPK))
 
 
 if __name__ == "__main__":

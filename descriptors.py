@@ -6,6 +6,7 @@ from pathlib import Path
 import pickle
 import cv2
 
+
 def grayscale_histogram(image: np.ndarray) -> np.ndarray:
     """
     Compute the grayscale histogram of an image.
@@ -65,7 +66,8 @@ def concat_rgb_histogram(image: np.ndarray) -> np.ndarray:
 
     return np.concatenate([r_hist, g_hist, b_hist])
 
-def rgb_histogram(image: np.array, bins=8) -> np.array:
+
+def rgb_histogram(image: np.ndarray, bins=8) -> np.ndarray:
     """
     Compute the 3D RGB histogram -> Can't use for week 1.
     Args:
@@ -75,7 +77,7 @@ def rgb_histogram(image: np.array, bins=8) -> np.array:
     """
     # Ensure uint8 input
     img = image.astype(np.uint8)
-    
+
     # Compute bin indices for each channel
     bin_edges = np.linspace(0, 256, bins + 1, endpoint=True)
     r_idx = np.digitize(img[:, :, 2].ravel(), bin_edges) - 1
@@ -88,12 +90,13 @@ def rgb_histogram(image: np.array, bins=8) -> np.array:
 
     return hist
 
-def hsv_histogram_concat(img_bgr: np.ndarray, bins=[16,16,8]) -> np.ndarray:
+
+def hsv_histogram_concat(img_bgr: np.ndarray, bins=[16, 16, 8]) -> np.ndarray:
     """
-    Compute a 1D concatenated HSV histogram    
+    Compute a 1D concatenated HSV histogram
     Args:
         img_bgr: A 3D numpy array representing an BGR image.
-    
+
     Returns:
         A 1D numpy array representing the concatenated histogram.
     """
@@ -127,6 +130,7 @@ def hsv_histogram_concat(img_bgr: np.ndarray, bins=[16,16,8]) -> np.ndarray:
         V_hist[idx] += 1
 
     return np.concatenate([H_hist, S_hist, V_hist]).astype(np.float32)
+
 
 def cumsum(a):
     """

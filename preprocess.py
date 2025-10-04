@@ -17,7 +17,7 @@ def preprocess_images(images: dict[str, np.ndarray]) -> dict[str, np.ndarray]:
         img_bal = np.clip(img_f, 0, 255).astype(np.uint8)
 
         # d) Suavitzat bilateral (treu soroll preservant vores i color)
-        img_smooth = cv2.blur(img_bal, (5,5))
+        img_smooth = cv2.blur(img_bal, (5, 5))
 
         images[img_name] = img_smooth
     return images
