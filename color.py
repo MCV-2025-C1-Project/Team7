@@ -1,19 +1,20 @@
 import numpy as np
 
+
 def rgb2hsv(rgb: np.ndarray) -> np.ndarray:
-    """ convert RGB to HSV color space
+    """convert RGB to HSV color space
 
     :param rgb: np.ndarray
     :return: np.ndarray
     """
-    rgb = rgb.astype('float') / 255.0
+    rgb = rgb.astype("float") / 255.0
 
     maxv = np.max(rgb, axis=2)
     minv = np.min(rgb, axis=2)
     delta = maxv - minv
 
     hsv = np.zeros_like(rgb)
-    
+
     mask = delta != 0
     r, g, b = rgb[..., 0], rgb[..., 1], rgb[..., 2]
 

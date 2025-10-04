@@ -7,7 +7,7 @@ def retrieval(
     query_decriptors: dict[int, np.ndarray],
     similarity: Callable[[np.ndarray, np.ndarray], float],
     top_k: int = 5,
-) -> dict[int, list[tuple[int, float]]]:
+) -> dict[int, list[tuple[float, int]]]:
     """
     Perform image retrieval by comparing query descriptors against a database of descriptors using a specified similarity function.
     Args:
@@ -30,7 +30,7 @@ def retrieval(
     # Get top K results
     top_results = {}
     for query_index, distances in similarities.items():
-        sorted_distances = sorted(distances.items(), key=lambda item: item[1])
-        top_results[query_index] = sorted_distances[:top_k]
+        sorted_distances = sorted([(v, k) for (k, v) in distances.items()])[:top_k]
+        top_results[query_index] = sorted_distances
 
     return top_results

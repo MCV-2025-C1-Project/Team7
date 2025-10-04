@@ -1,6 +1,6 @@
-
-
-def mean_average_precision_K(results: dict[int, list[tuple[int, float]]], gt: list[list[int]], K: int = 1):
+def mean_average_precision_K(
+    results: dict[int, list[tuple[float, int]]], gt: list[list[int]], K: int = 1
+):
     """
     Computes the mean average precision at K.
     Args:

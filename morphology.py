@@ -1,5 +1,6 @@
 import numpy as np
 
+
 def dilate(img: np.ndarray, kernel_size: int = 3) -> np.ndarray:
     """
     Args:
@@ -15,9 +16,9 @@ def dilate(img: np.ndarray, kernel_size: int = 3) -> np.ndarray:
 
     for y in range(h):
         for x in range(w):
-            sliding_window = padded_img[y:y+kernel_size, x:x+kernel_size]
+            sliding_window = padded_img[y : y + kernel_size, x : x + kernel_size]
             out[y, x] = np.max(sliding_window)
-            
+
     return out
 
 
@@ -36,13 +37,15 @@ def erode(img: np.ndarray, kernel_size: int = 3) -> np.ndarray:
 
     for y in range(h):
         for x in range(w):
-            sliding_window = padded_img[y:y+kernel_size, x:x+kernel_size]
+            sliding_window = padded_img[y : y + kernel_size, x : x + kernel_size]
             out[y, x] = np.min(sliding_window)
-            
+
     return out
+
 
 def openning(img: np.ndarray) -> np.ndarray:
     return dilate(erode(img))
+
 
 def closing(img: np.ndarray) -> np.ndarray:
     return erode(dilate(img))

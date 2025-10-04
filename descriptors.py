@@ -3,8 +3,8 @@ from collections.abc import Callable
 import numpy as np
 import tqdm
 from pathlib import Path
-from PIL import Image
 import pickle
+
 
 def grayscale_histogram(image: np.ndarray) -> np.ndarray:
     """
@@ -19,6 +19,30 @@ def grayscale_histogram(image: np.ndarray) -> np.ndarray:
     for pixel in image.flatten():
         histogram[pixel] += 1
     return histogram
+
+
+def rgb_hist_hellinger(image: np.ndarray, bins: int = 8) -> np.ndarray:
+    """
+    Compute the RGB histogram of an image using Hellinger bins.
+    Args:
+        image: A 3D numpy array representing an RGB image.
+        bins: Number of bins per channel.
+    Returns:
+        A 1D numpy array of length bins*3 representing the concatenated histogram.
+    """
+
+    hist = np.zeros((bins, 3), dtype=np.float32)
+
+    bin_size = 256 // bins
+    for r, g, b in image.reshape(-1, 3):
+        hist[r // bin_size, 0] += 1
+        hist[g // bin_size, 1] += 1
+        hist[b // bin_size, 2] += 1
+
+    # Apply Hellinger normalization
+    hist = np.sqrt(hist / (hist.sum() + 1e-8))
+
+    return hist.flatten().astype(np.float32)
 
 
 def concat_rgb_histogram(image: np.ndarray) -> np.ndarray:
@@ -41,6 +65,7 @@ def concat_rgb_histogram(image: np.ndarray) -> np.ndarray:
 
     return np.concatenate([r_hist, g_hist, b_hist])
 
+
 def cumsum(a):
     """
     Computes a cumulated histogram.
@@ -55,6 +80,7 @@ def cumsum(a):
         b.append(b[-1] + i)
     return np.array(b)
 
+
 def equalization(img: np.ndarray) -> np.ndarray:
     """
     Computes the equalized image.
@@ -66,19 +92,19 @@ def equalization(img: np.ndarray) -> np.ndarray:
     cs = cumsum(grayscale_histogram(img))
     nj = (cs - cs.min()) * 255
     N = cs.max() - cs.min()
-    
+
     # re-normalize the cumsum
     cs = nj / N
-    
+
     # cast it back to uint8 since we can't use floating point values in images
-    cs = cs.astype('uint8')
-    
+    cs = cs.astype("uint8")
+
     # get the value from cumulative sum for every index in flat, and set that as img_new
     img_new = cs[img.flatten()]
-    
+
     # put array back into original shape since we flattened it
     img_new = np.reshape(img_new, img.shape)
-    
+
     return img_new
 
 
@@ -102,18 +128,20 @@ def compute_descriptors(
     Returns:
         A dictionary mapping image indices (extracted from filenames) to their computed descriptors.
     """
-    pkl_path = Path(__file__).parent / f"{suffix}-{method.__name__}-{('grayscale' if use_grayscale else 'rgb')}.pkl"
+    # Determine the path for the .pkl file based on parameters
+    pkl_path = (
+        Path(__file__).parent
+        / f"{suffix}-{method.__name__}-{('grayscale' if use_grayscale else 'rgb')}.pkl"
+    )
+
+    # Load descriptors from .pkl if it exists and overwrite is False
     if pkl_path.exists() and not overwrite_pkl:
         with open(pkl_path, "rb") as f:
             descriptors = pickle.load(f)
     else:
         descriptors = {}
-        for imgname in tqdm.tqdm(images.keys(), desc="Computing descriptors"):
-            if use_grayscale:
-                image = np.array(Image.open(imgname).convert("L"))
-            else:
-                image = np.array(Image.open(imgname).convert("RGB"))
-            descriptor = method(image)
+        # for each image, compute the descriptor and store it in the dictionary
+        for imgname, image in tqdm.tqdm(images.items(), desc="Computing descriptors"):
             descriptor = method(image)
             descriptor_index = int(imgname.split("_")[-1])
             descriptors[descriptor_index] = descriptor
