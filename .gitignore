@@ -15,3 +15,5 @@ wheels/
 # datasets
 BBDD/
 qsd*
+/qst1_w1
+/descriptor/qst1_w1

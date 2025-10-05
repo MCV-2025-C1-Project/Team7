@@ -4,7 +4,10 @@ import numpy as np
 import tqdm
 from pathlib import Path
 import pickle
+from filtering import laplacian_filter
+
 import cv2
+
 
 
 def grayscale_histogram(image: np.ndarray) -> np.ndarray:
@@ -206,11 +209,25 @@ def compute_descriptors(
             descriptors = pickle.load(f)
     else:
         descriptors = {}
+        #ADVO INI : Aplication of laplatian instead of smoothing
+        """
         # for each image, compute the descriptor and store it in the dictionary
         for imgname, image in tqdm.tqdm(images.items(), desc="Computing descriptors"):
             descriptor = method(image)
             descriptor_index = int(imgname.split("_")[-1])
             descriptors[descriptor_index] = descriptor
+        """
+        for imgname, image in tqdm.tqdm(images.items(), desc="Computing descriptors"):
+            # Convertimos a escala de grises
+            gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
+            lap_edges = laplacian_filter(gray)
+            descriptor = method(lap_edges)
+            descriptor_index = int(imgname.split("_")[-1])
+            descriptors[descriptor_index] = descriptor
+        #ADVO FIN : Aplication of laplatian instead of smoothing
+
+
+
         if save_as_pkl:
             with open(pkl_path, "wb") as f:
                 pickle.dump(descriptors, f)
