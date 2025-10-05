@@ -12,8 +12,33 @@ Then we can ask uv to set up the local environment.
 cd Team7
 uv sync
 ```
+This will create a virtual environment in the `.venv` folder and install all the dependencies specified in the `pyproject.toml` file.
+To activate the virtual environment, you can use:
+```shell
+source .venv/bin/activate  # On Windows use `.venv\Scripts\activate
+```
+
+If you don't wanna use uv, you can create a virtual environment using `python -m venv .venv` and then install the dependencies using `pip install -r requirements.txt`.
 
 If you wanna use jupyter notebooks + uv, follow this [guide](https://docs.astral.sh/uv/guides/integration/jupyter/).
+
+## How-to use this
+To run the main.py file using uv, you can use the following command:
+```shell
+uv run main.py
+```
+The configuration of the main.py uses the method 1 from the week 1 assignment (preprocessing + hsv histogram concatenation).
+If you want to change the configuration, you can edit the `main.py` file at the lines:
+line 30: change the value of TOPK to the desired number of results (this will affect the mAP@K metric).
+line 38: change to preprocess_images_laplacian for method 2.
+line 43: change to grayscale_histogram for method 2.
+Apply the same changes to lines 53 and 56 for the query images.
+
+To run the main.py file without using uv, you can use the following command:
+```shell
+# Activate the virtual environment if you have one
+python3 main.py
+```
 
 # BBDD Structure
 The BBDD folder contains the following structure:

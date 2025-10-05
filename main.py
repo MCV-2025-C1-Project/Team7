@@ -5,6 +5,7 @@ import cv2
 from descriptors import (
     compute_descriptors,
     hsv_histogram_concat,
+    grayscale_histogram
 )
 from similarity import (
     compute_euclidean_distance,
@@ -15,7 +16,7 @@ from similarity import (
 )
 from retrieval import retrieval
 from metrics import mean_average_precision_K
-from preprocess import preprocess_images
+from preprocess import preprocess_images, preprocess_images_laplacian
 
 
 # main function that executes all:
@@ -26,7 +27,7 @@ from preprocess import preprocess_images
 # 5) evaluate with mean average precision at K
 # 6) print results
 def main():
-    TOPK = 5
+    TOPK = 10
     # 1) BBDD image paths
     pathlist = list(Path(Path(__file__).parent / "datasets" / "BBDD").glob("*.jpg"))
 
@@ -49,12 +50,12 @@ def main():
     # Repeate the same for Query descriptors
     pathlist = list(Path(Path(__file__).parent / "datasets" / "qsd1_w1").glob("*.jpg"))
     query_images = {img_path.stem: cv2.imread(str(img_path)) for img_path in pathlist}
-    query_images = preprocess_images(query_images)
+    query_images = preprocess_images_laplacian(query_images)
     query_rgb_descriptors = compute_descriptors(
         "qsd1_w1",
-        hsv_histogram_concat,
+        grayscale_histogram,
         query_images,
-        use_grayscale=False,
+        use_grayscale=True,
         save_as_pkl=True,
         overwrite_pkl=True,
     )
@@ -63,42 +64,42 @@ def main():
     gt = pickle.load(open("./datasets/qsd1_w1/gt_corresps.pkl", "rb"))
 
     # 4) Retrieval and 5) Evaluation with mAP@K
-    print(f"Retrieval using {hsv_histogram_concat.__name__} and Euclidean Distance")
+    print(f"Retrieval using {preprocess_images_laplacian.__name__} and Euclidean Distance")
     results = retrieval(
         bbdd_rgb_descriptors,
         query_rgb_descriptors,
         compute_euclidean_distance,
         top_k=TOPK,
     )
-    print(f"mAP@{TOPK}:", mean_average_precision_K(results, gt, K=TOPK))
+    print(f"mAP@K={TOPK}:", mean_average_precision_K(results, gt, K=TOPK))
 
-    print(f"Retrieval using {hsv_histogram_concat.__name__} and Manhattan Distance")
+    print(f"Retrieval using {preprocess_images_laplacian.__name__} and Manhattan Distance")
     results = retrieval(
         bbdd_rgb_descriptors,
         query_rgb_descriptors,
         compute_manhattan_distance,
         top_k=TOPK,
     )
-    print(f"mAP@{TOPK}:", mean_average_precision_K(results, gt, K=TOPK))
+    print(f"mAP@K={TOPK}:", mean_average_precision_K(results, gt, K=TOPK))
 
-    print(f"Retrieval using {hsv_histogram_concat.__name__} and X^2 Distance")
+    print(f"Retrieval using {preprocess_images_laplacian.__name__} and X^2 Distance")
     results = retrieval(
         bbdd_rgb_descriptors, query_rgb_descriptors, compute_x2_distance, top_k=TOPK
     )
     # for query_index in range(len(query_rgb_descriptors)):
     #     print(f"{query_index}: {results[query_index]}")
-    print(f"mAP@{TOPK}:", mean_average_precision_K(results, gt, K=TOPK))
+    print(f"mAP@K={TOPK}:", mean_average_precision_K(results, gt, K=TOPK))
 
-    print(f"Retrieval using {hsv_histogram_concat.__name__} and Histogram Intersection")
+    print(f"Retrieval using {preprocess_images_laplacian.__name__} and Histogram Intersection")
     results = retrieval(
         bbdd_rgb_descriptors,
         query_rgb_descriptors,
         compute_histogram_intersection,
         top_k=TOPK,
     )
-    print(f"mAP@{TOPK}:", mean_average_precision_K(results, gt, K=TOPK))
+    print(f"mAP@K={TOPK}:", mean_average_precision_K(results, gt, K=TOPK))
 
-    print(f"Retrieval using {hsv_histogram_concat.__name__} and Hellinger Distance")
+    print(f"Retrieval using {preprocess_images_laplacian.__name__} and Hellinger Distance")
     results = retrieval(
         bbdd_rgb_descriptors,
         query_rgb_descriptors,
@@ -107,8 +108,33 @@ def main():
     )
     # for query_index in range(len(query_rgb_descriptors)):
     #     print(f"{query_index}: {results[query_index]}")
-    print(f"mAP@{TOPK}:", mean_average_precision_K(results, gt, K=TOPK))
+    print(f"mAP@K={TOPK}:", mean_average_precision_K(results, gt, K=TOPK))
 
+    # # Compute for TESTSET and save as pkl
+    # pathlist = list(Path(Path(__file__).parent / "datasets" / "qst1_w1").glob("*.jpg"))
+    # test_images = {img_path.stem: cv2.imread(str(img_path)) for img_path in pathlist}
+    # test_images = preprocess_images_laplacian(test_images)
+    # test_rgb_descriptors = compute_descriptors(
+    #     "qst1_w1",
+    #     grayscale_histogram,
+    #     test_images,
+    #     use_grayscale=True,
+    #     save_as_pkl=True,
+    #     overwrite_pkl=True,
+    # )
+    # results = retrieval(
+    #     bbdd_rgb_descriptors,
+    #     test_rgb_descriptors,
+    #     compute_manhattan_distance,
+    #     top_k=TOPK,
+    # )
+    # sorted_results_listoflists = [
+    #     [tup[1] for tup in results[query_index]] for query_index in range(len(test_rgb_descriptors))
+    # ]
+    # print(sorted_results_listoflists)
+    # pickle.dump(
+    #     sorted_results_listoflists, open("result.pkl", "wb")
+    # )
 
 if __name__ == "__main__":
     main()

@@ -37,7 +37,6 @@ def apply_filters(
     for filter_func in filters:
         images = {img_name: filter_func(img) for img_name, img in images.items()}
     return images
-import numpy as np
 
 
 #ADVO INI : Laplacian Filter
