@@ -47,7 +47,7 @@ def main():
         overwrite_pkl=True,
     )
 
-    # Repeate the same for Query descriptors
+    # Repeate the same for Query descriptors of qsd1_w1
     pathlist = list(Path(Path(__file__).parent / "datasets" / "qsd1_w1").glob("*.jpg"))
     query_images = {img_path.stem: cv2.imread(str(img_path)) for img_path in pathlist}
     query_images = preprocess_images_laplacian(query_images)
@@ -59,6 +59,17 @@ def main():
         save_as_pkl=True,
         overwrite_pkl=True,
     )
+    
+    # Repeate the same for Query descriptors of qsd2_w1
+    pathlist = list(Path(Path(__file__).parent / "datasets" / "qsd2_w1").glob("*.png"))
+    query_gt_masks = [cv2.imread(str(img_path), cv2.IMREAD_GRAYSCALE) for img_path in pathlist]
+    pathlist = list(Path(Path(__file__).parent / "datasets" / "qsd2_w1").glob("*.jpg"))
+    query_images = {img_path.stem: cv2.imread(str(img_path)) for img_path in pathlist}
+    """
+    TODO:
+        - Compute binary masks of query_images
+        - loop through query_gt_masks and the computed binary masks calling metrics.BinaryMaskEvaluation
+    """
 
     # Load ground truth correspondences
     gt = pickle.load(open("./datasets/qsd1_w1/gt_corresps.pkl", "rb"))

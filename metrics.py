@@ -1,3 +1,5 @@
+import numpy as np
+
 def mean_average_precision_K(
     results: dict[int, list[tuple[float, int]]], gt: list[list[int]], K: int = 1
 ):
@@ -30,3 +32,36 @@ def mean_average_precision_K(
             ap_sum += precision_sum / len(relevant)
 
     return ap_sum / num_queries if num_queries > 0 else 0.0
+
+
+
+
+def BinaryMaskEvaluation(mask: np.ndarray, gt: np.ndarray):
+    """
+    Computes the precision, recall and F1-measure of a binary mask
+    Args:
+        mask: A np array representing the binary mask to evaluate.
+        gt: A np array representing the ground truth binary mask.
+    Returns:
+        A dictionary with the precision, recall and F1-measure values.
+    """
+    if mask.shape != gt.shape:
+        print("Can't compare masks of different sizes")
+        return
+    
+    mask = mask > 0
+    gt = gt > 0
+    
+    TP = np.sum(np.logical_and(gt, mask))
+    FN = np.sum(np.logical_and(gt, np.logical_not(mask)))
+    FP = np.sum(np.logical_and(np.logical_not(gt), mask))
+
+    precision = TP / (TP + FP) if (TP + FP) > 0 else 0.0
+    recall = TP / (TP + FN) if (TP + FN) > 0 else 0.0
+    F1 = (2 * precision * recall) / (precision + recall) if (precision + recall) > 0 else 0.0
+
+    return {
+        'precision': precision,
+        'recall': recall,
+        'F1': F1
+    }
