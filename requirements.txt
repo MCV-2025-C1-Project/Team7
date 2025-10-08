@@ -59,18 +59,22 @@ numpy==2.2.6 ; python_full_version < '3.11'
     #   matplotlib
     #   museum-painting-retrieval
     #   opencv-python
+    #   pandas
 numpy==2.3.3 ; python_full_version >= '3.11'
     # via
     #   contourpy
     #   matplotlib
     #   museum-painting-retrieval
     #   opencv-python
+    #   pandas
 opencv-python==4.11.0.86
     # via museum-painting-retrieval
 packaging==25.0
     # via
     #   ipykernel
     #   matplotlib
+pandas==2.3.3
+    # via museum-painting-retrieval
 parso==0.8.5
     # via jedi
 pexpect==4.9.0 ; sys_platform != 'emscripten' and sys_platform != 'win32'
@@ -101,6 +105,9 @@ python-dateutil==2.9.0.post0
     # via
     #   jupyter-client
     #   matplotlib
+    #   pandas
+pytz==2025.2
+    # via pandas
 pywin32==311 ; platform_python_implementation != 'PyPy' and sys_platform == 'win32'
     # via jupyter-core
 pyzmq==27.1.0
@@ -128,5 +135,7 @@ typing-extensions==4.15.0 ; python_full_version < '3.12'
     # via
     #   exceptiongroup
     #   ipython
+tzdata==2025.2
+    # via pandas
 wcwidth==0.2.14
     # via prompt-toolkit

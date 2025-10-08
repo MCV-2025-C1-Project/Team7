@@ -1,7 +1,7 @@
 from collections.abc import Callable
 
 import numpy as np
-import tqdm
+# import tqdm
 from pathlib import Path
 import pickle
 
@@ -92,6 +92,142 @@ def rgb_histogram(image: np.ndarray, bins=8) -> np.ndarray:
     hist = np.bincount(flat_idx, minlength=bins**3).astype(np.float32)
 
     return hist
+
+
+def hsv_histogram(image: np.ndarray, bins=[16, 16, 8]) -> np.ndarray:
+    """
+    Compute the 3D HSV histogram.
+    Args:
+        image: A 3D numpy array representing an BGR image.
+    Returns:
+        A 1D numpy array of length bins[0]*bins[1]*bins[2] representing the 3D histogram.
+    """
+    assert image.shape[2] == 3, "Input image must have 3 channels (BGR format)."
+    assert len(bins) == 3, "Bins must be a list of three integers."
+
+    img_hsv = cv2.cvtColor(image.astype(np.uint8), cv2.COLOR_BGR2HSV)
+    h_bins = bins[0]
+    s_bins = bins[1]
+    v_bins = bins[2]
+
+    # Compute flattened values for each channel
+    H = img_hsv[:, :, 0].ravel()
+    S = img_hsv[:, :, 1].ravel()
+    V = img_hsv[:, :, 2].ravel()
+
+    # Compute bin edges for each channel
+    H_bin_edges = np.linspace(0, 256, h_bins + 1)
+    S_bin_edges = np.linspace(0, 256, s_bins + 1)
+    V_bin_edges = np.linspace(0, 256, v_bins + 1)
+
+    # Compute bin indices for each channel
+    H_idx = np.digitize(H, H_bin_edges) - 1
+    S_idx = np.digitize(S, S_bin_edges) - 1
+    V_idx = np.digitize(V, V_bin_edges) - 1
+
+    # Compute flattened histogram indices
+    flat_idx = H_idx * (s_bins * v_bins) + S_idx * v_bins + V_idx
+
+    # Get the output histogram by counting occurrences of each index
+    hist = np.bincount(flat_idx, minlength=h_bins * s_bins * v_bins).astype(np.float32)
+
+    return hist
+
+def hsv_block_histogram_concat(
+    image: np.ndarray,
+    bins: list[int],
+    grid: tuple[int, int]
+) -> np.ndarray:
+    """
+    Compute the concatenated HSV histograms of image blocks. Uses the function hsv_histogram.
+    Args:
+        image: A 3D numpy array representing an BGR image.
+        bins: Number of bins per channel.
+        grid: Tuple representing the number of blocks in (rows, cols).
+    Returns:
+        A 1D numpy array representing the concatenated histograms of all blocks.
+    """
+    assert image.shape[2] == 3, "Input image must have 3 channels (BGR format)."
+    assert len(bins) == 3, "Bins must be a list of three integers."
+    assert len(grid) == 2, "Grid must be a tuple of two integers (rows, cols)."
+
+    # Compute height&width block size and initialize list for histograms
+    h_block, w_block = image.shape[0] // grid[0], image.shape[1] // grid[1]
+    histograms = []
+
+    for i in range(grid[0]):
+        for j in range(grid[1]):
+            # get image block
+            block = image[
+                i * h_block : (i + 1) * h_block, j * w_block : (j + 1) * w_block, :
+            ]
+            # compute histogram for block and append to list
+            hist = hsv_histogram(block, bins)
+            histograms.append(hist)
+
+    return np.concatenate(histograms).astype(np.float32)
+
+
+def hsv_block_hist_concat_func(
+    bins: list[int] = [16, 16, 8],
+    grid: tuple[int, int] = (2, 2)
+) -> Callable[[np.ndarray], np.ndarray]:
+    """
+    Wrapper function that returns the function hsv_block_histogram_concat but with the desired bins and grid parameters set.
+    Args:
+        bins: Number of bins per channel.
+        grid: Tuple representing the number of blocks in (rows, cols).
+    Returns:
+        A callable function that takes an image and returns the concatenated histogram, with the specified bins and grid.
+    """
+    def func(img_bgr: np.ndarray) -> np.ndarray:
+        return hsv_block_histogram_concat(img_bgr, bins, grid)
+    
+    return func
+
+
+def hsv_hierarchical_block_histogram_concat(
+    img_bgr: np.ndarray, bins: list[int],
+    levels_grid: list[tuple[int, int]]
+) -> np.ndarray:
+    """
+    Compute the concatenated HSV histograms of hierarchical image blocks. Uses the function hsv_block_histogram_concat.
+    Args:
+        img_bgr: A 3D numpy array representing an BGR image.
+        bins: Number of bins per channel.
+        levels_grid: List of tuples representing the number of blocks in (rows, cols) for each level.
+    Returns:
+        A 1D numpy array representing the concatenated histograms of all blocks across levels.
+    """
+    assert img_bgr.shape[2] == 3, "Input image must have 3 channels (BGR format)."
+    assert len(bins) == 3, "Bins must be a list of three integers."
+    assert all(len(grid) == 2 for grid in levels_grid), "Each grid must be a tuple of two integers (rows, cols)."
+    
+    histograms = []
+
+    for grid in levels_grid:
+        hist = hsv_block_histogram_concat(img_bgr, bins, grid)
+        histograms.append(hist)
+
+    return np.concatenate(histograms).astype(np.float32)
+
+
+def hsv_hier_block_hist_concat_func(
+    bins: list[int] = [16, 16, 8],
+    levels_grid: list[tuple[int, int]] = [(1, 1), (2, 2), (3, 3)]
+) -> Callable[[np.ndarray], np.ndarray]:
+    """
+    Wrapper function that returns the function hsv_hierarchical_block_histogram_concat but with the desired bins and levels_grid parameters set.
+    Args:
+        bins: Number of bins per channel.
+        levels_grid: List of tuples representing the number of blocks in (rows, cols) for each level.
+    Returns:
+        A callable function that takes an image and returns the concatenated histogram, with the specified bins and levels_grid.
+    """
+    def func(img_bgr: np.ndarray) -> np.ndarray:
+        return hsv_hierarchical_block_histogram_concat(img_bgr, bins, levels_grid)
+    
+    return func
 
 
 def hsv_histogram_concat(img_bgr: np.ndarray, bins=[16, 16, 8]) -> np.ndarray:
@@ -200,7 +336,7 @@ def compute_descriptors(
     # Determine the path for the .pkl file based on parameters
     pkl_path = (
         Path(__file__).parent
-        / f"{suffix}-{method.__name__}-{('grayscale' if use_grayscale else 'rgb')}.pkl"
+        / f"{suffix}-{method.__name__}-{('grayscale' if use_grayscale else 'color')}.pkl"
     )
 
     # Load descriptors from .pkl if it exists and overwrite is False
@@ -210,7 +346,7 @@ def compute_descriptors(
     else:
         descriptors = {}
         # for each image, compute the descriptor and store it in the dictionary
-        for imgname, image in tqdm.tqdm(images.items(), desc="Computing descriptors"):
+        for imgname, image in images.items(): # tqdm.tqdm(images.items(), desc="Computing descriptors"):
             descriptor = method(image)
             descriptor_index = int(imgname.split("_")[-1])
             descriptors[descriptor_index] = descriptor

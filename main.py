@@ -5,7 +5,8 @@ import cv2
 from descriptors import (
     compute_descriptors,
     hsv_histogram_concat,
-    grayscale_histogram
+    hsv_hier_block_hist_concat_func,
+    hsv_block_hist_concat_func
 )
 from similarity import (
     compute_euclidean_distance,
@@ -15,29 +16,79 @@ from similarity import (
     compute_hellinger_distance,
 )
 from retrieval import retrieval
-from metrics import mean_average_precision_K
-from preprocess import preprocess_images, preprocess_images_laplacian
+from metrics import mean_average_precision_K, BinaryMaskEvaluation
+from preprocess import preprocess_images
+import pandas as pd
 
-
-# main function that executes all:
-# 1) load images in bgr
-# 2) preprocess images
-# 3) compute descriptors
-# 4) retrieval
-# 5) evaluate with mean average precision at K
-# 6) print results
+# main function adapted for week 1&2 comparisons:
+# 1) load all images in bgr
+# 2) preprocess all images
+# 3) compute week 1 method as reference point
+# 4) compute week 2 methods with different parameters (nested loops, takes a long time to compute)
 def main():
-    TOPK = 10
-    # 1) BBDD image paths
-    pathlist = list(Path(Path(__file__).parent / "datasets" / "BBDD").glob("*.jpg"))
+    test_mode = False  # If True, only process a few images for quick testing & visualization purposes
+    TOPK = [1, 5, 10]  # Values of K for mAP@K evaluation
+    distance_functions = [
+        compute_euclidean_distance,
+        compute_manhattan_distance,
+        compute_x2_distance,
+        compute_histogram_intersection,
+        compute_hellinger_distance
+    ]
+    testing_bins = [[8,8,8], [16,16,16], [32,32,32], [64,64,64]]
+    testing_grids = [(1,1), (2,2), (3,3), (4,4), (5,5)]
+    testing_level_grids = [[(1,1), (2,2), (3,3)], [(2,2), (3,3), (4,4)], [(3,3), (4,4), (5,5)], [(1,1), (2,2), (4,4)], [(1,1), (3,3), (5,5)]]
+    
+    # 1) Load all images paths
+    if test_mode:
+        qsd1_pathlist = list(Path(Path(__file__).parent / "datasets" / "qsd1_w1").glob("*.jpg"))[:5]
+        qsd2_pathlist = list(Path(Path(__file__).parent / "datasets" / "qsd2_w2").glob("*.jpg"))[:5]
+        qsd2_masks_pathlist = list(Path(Path(__file__).parent / "datasets" / "qsd2_w2").glob("*.png"))[:5]
+        qst1_pathlist = list(Path(Path(__file__).parent / "datasets" / "qst1_w1").glob("*.jpg"))[:5]
+        qst2_pathlist = list(Path(Path(__file__).parent / "datasets" / "qst2_w2").glob("*.jpg"))[:5]
+    else:
+        qsd1_pathlist = list(Path(Path(__file__).parent / "datasets" / "qsd1_w1").glob("*.jpg"))
+        qsd2_pathlist = list(Path(Path(__file__).parent / "datasets" / "qsd2_w2").glob("*.jpg"))
+        qsd2_masks_pathlist = list(Path(Path(__file__).parent / "datasets" / "qsd2_w2").glob("*.png"))
+        qst1_pathlist = list(Path(Path(__file__).parent / "datasets" / "qst1_w1").glob("*.jpg"))
+        qst2_pathlist = list(Path(Path(__file__).parent / "datasets" / "qst2_w2").glob("*.jpg"))
+    bbdd_pathlist = list(Path(Path(__file__).parent / "datasets" / "BBDD").glob("*.jpg"))
+    
+    # Load qsd1_w1 ground truth correspondences
+    gt = pickle.load(open("./datasets/qsd1_w1/gt_corresps.pkl", "rb"))
 
-    # 1.1) Load BBDD images into a dictionary, key is the filename without extension and value is the image in bgr
-    bbdd_images = {img_path.stem: cv2.imread(str(img_path)) for img_path in pathlist}
+    # 1.1) Load all images into a dictionary, key is the filename without extension and value is the image in bgr
+    bbdd_images = {img_path.stem: cv2.imread(str(img_path)) for img_path in bbdd_pathlist}
+    qsd1_images = {img_path.stem: cv2.imread(str(img_path)) for img_path in qsd1_pathlist}
+    qsd2_images = {img_path.stem: cv2.imread(str(img_path)) for img_path in qsd2_pathlist}
+    qst1_images = {img_path.stem: cv2.imread(str(img_path)) for img_path in qst1_pathlist}
+    qst2_images = {img_path.stem: cv2.imread(str(img_path)) for img_path in qst2_pathlist}
+    qsd2_gt_masks = {img_path.stem: cv2.imread(str(img_path), cv2.IMREAD_GRAYSCALE) for img_path in qsd2_masks_pathlist}
 
-    # 2) Preprocess BBDD images (resize 256x256, color balance, contrast&brightness adjustment, smoothing)
-    bbdd_images = preprocess_images(bbdd_images)
+    """
+    TODO WEEK 2 TASK 4:
+        - Compute binary masks of query_images
+        - loop through query_gt_masks and the computed binary masks calling metrics.BinaryMaskEvaluation
+        possible pseudocode:
+            average_metrics = {}
+            binary_masks, cropped_images = segment_background(qsd2_images)
+            for img_name in qsd2_gt_masks.keys():
+                result = BinaryMaskEvaluation(binary_masks[img_name], qsd2_gt_masks[img_name])
+                for key in average_metrics.keys():
+                    if key not in average_metrics:
+                        average_metrics[key] = 0.0
+                    average_metrics[key] += result[key]
+            for key in average_metrics.keys():
+                average_metrics[key] /= len(qsd2_gt_masks)
+            print(average_metrics)
+    """
+    
+    # 2) Preprocess all images with the same preprocessing method (resize 256x256, color balance, contrast&brightness adjustment, smoothing)
+    lists_to_preprocess = [bbdd_images, qsd1_images, qst1_images]
+    for i in range(len(lists_to_preprocess)):
+        lists_to_preprocess[i] = preprocess_images(lists_to_preprocess[i])
 
-    # 3) Compute descriptors for BBDD images
+    # WEEK 1 method 1: hsv_histogram_concat x all distance metrics
     bbdd_rgb_descriptors = compute_descriptors(
         "bbdd",
         hsv_histogram_concat,
@@ -48,78 +99,106 @@ def main():
     )
 
     # Repeate the same for Query descriptors of qsd1_w1
-    pathlist = list(Path(Path(__file__).parent / "datasets" / "qsd1_w1").glob("*.jpg"))
-    query_images = {img_path.stem: cv2.imread(str(img_path)) for img_path in pathlist}
-    query_images = preprocess_images_laplacian(query_images)
     query_rgb_descriptors = compute_descriptors(
         "qsd1_w1",
-        grayscale_histogram,
-        query_images,
-        use_grayscale=True,
+        hsv_histogram_concat,
+        qsd1_images,
+        use_grayscale=False,
         save_as_pkl=True,
         overwrite_pkl=True,
     )
     
-    # Repeate the same for Query descriptors of qsd2_w1
-    pathlist = list(Path(Path(__file__).parent / "datasets" / "qsd2_w1").glob("*.png"))
-    query_gt_masks = [cv2.imread(str(img_path), cv2.IMREAD_GRAYSCALE) for img_path in pathlist]
-    pathlist = list(Path(Path(__file__).parent / "datasets" / "qsd2_w1").glob("*.jpg"))
-    query_images = {img_path.stem: cv2.imread(str(img_path)) for img_path in pathlist}
-    """
-    TODO:
-        - Compute binary masks of query_images
-        - loop through query_gt_masks and the computed binary masks calling metrics.BinaryMaskEvaluation
-    """
+    map_results = {}
+    for k in TOPK:
+        map_results[f"mAP@K={k}"] = {}
+        for distance_function in distance_functions:
+            results = retrieval(
+                bbdd_rgb_descriptors,
+                query_rgb_descriptors,
+                distance_function,
+                top_k=k,
+            )
+            map_results[f"mAP@K={k}"][distance_function.__name__] = mean_average_precision_K(results, gt, K=k)
+    print("WEEK 1: hsv_histogram_concat")
+    print(pd.DataFrame(map_results))
+    print()
 
-    # Load ground truth correspondences
-    gt = pickle.load(open("./datasets/qsd1_w1/gt_corresps.pkl", "rb"))
+    # WEEK 2 methods 1 & 2: hsv_block_hist_concat & hsv_hier_block_hist_concat x all distance metrics
+    for bins in testing_bins:
+        for grid_idx, grid in enumerate(testing_grids):
+            # START method hsv_block_hist_concat
+            my_hsv_block_hist_concat = hsv_block_hist_concat_func(bins=bins, grid=grid)
+            bbdd_rgb_descriptors = compute_descriptors(
+                "bbdd",
+                my_hsv_block_hist_concat,
+                bbdd_images,
+                use_grayscale=False,
+                save_as_pkl=True,
+                overwrite_pkl=True,
+            )
 
-    # 4) Retrieval and 5) Evaluation with mAP@K
-    print(f"Retrieval using {preprocess_images_laplacian.__name__} and Euclidean Distance")
-    results = retrieval(
-        bbdd_rgb_descriptors,
-        query_rgb_descriptors,
-        compute_euclidean_distance,
-        top_k=TOPK,
-    )
-    print(f"mAP@K={TOPK}:", mean_average_precision_K(results, gt, K=TOPK))
+            # Repeate the same for Query descriptors of qsd1_w1
+            query_rgb_descriptors = compute_descriptors(
+                "qsd1_w1",
+                my_hsv_block_hist_concat,
+                qsd1_images,
+                use_grayscale=False,
+                save_as_pkl=True,
+                overwrite_pkl=True,
+            )
+            
+            map_results = {}
+            for k in TOPK:
+                map_results[f"mAP@K={k}"] = {}
+                for distance_function in distance_functions:
+                    results = retrieval(
+                        bbdd_rgb_descriptors,
+                        query_rgb_descriptors,
+                        distance_function,
+                        top_k=k,
+                    )
+                    map_results[f"mAP@K={k}"][distance_function.__name__] = mean_average_precision_K(results, gt, K=k)
+            print(f"WEEK 2: hsv_block_hist_concat bins={bins} grid={grid}")
+            print(pd.DataFrame(map_results))
+            print()
+            # END method hsv_block_hist_concat
+            
+            # START method hsv_hier_block_hist_concat
+            my_hsv_hier_block_hist_concat = hsv_hier_block_hist_concat_func(bins=bins, levels_grid=testing_level_grids[grid_idx])
+            bbdd_rgb_descriptors = compute_descriptors(
+                "bbdd",
+                my_hsv_hier_block_hist_concat,
+                bbdd_images,
+                use_grayscale=False,
+                save_as_pkl=True,
+                overwrite_pkl=True,
+            )
 
-    print(f"Retrieval using {preprocess_images_laplacian.__name__} and Manhattan Distance")
-    results = retrieval(
-        bbdd_rgb_descriptors,
-        query_rgb_descriptors,
-        compute_manhattan_distance,
-        top_k=TOPK,
-    )
-    print(f"mAP@K={TOPK}:", mean_average_precision_K(results, gt, K=TOPK))
-
-    print(f"Retrieval using {preprocess_images_laplacian.__name__} and X^2 Distance")
-    results = retrieval(
-        bbdd_rgb_descriptors, query_rgb_descriptors, compute_x2_distance, top_k=TOPK
-    )
-    # for query_index in range(len(query_rgb_descriptors)):
-    #     print(f"{query_index}: {results[query_index]}")
-    print(f"mAP@K={TOPK}:", mean_average_precision_K(results, gt, K=TOPK))
-
-    print(f"Retrieval using {preprocess_images_laplacian.__name__} and Histogram Intersection")
-    results = retrieval(
-        bbdd_rgb_descriptors,
-        query_rgb_descriptors,
-        compute_histogram_intersection,
-        top_k=TOPK,
-    )
-    print(f"mAP@K={TOPK}:", mean_average_precision_K(results, gt, K=TOPK))
-
-    print(f"Retrieval using {preprocess_images_laplacian.__name__} and Hellinger Distance")
-    results = retrieval(
-        bbdd_rgb_descriptors,
-        query_rgb_descriptors,
-        compute_hellinger_distance,
-        top_k=TOPK,
-    )
-    # for query_index in range(len(query_rgb_descriptors)):
-    #     print(f"{query_index}: {results[query_index]}")
-    print(f"mAP@K={TOPK}:", mean_average_precision_K(results, gt, K=TOPK))
+            # Repeate the same for Query descriptors of qsd1_w1
+            query_rgb_descriptors = compute_descriptors(
+                "qsd1_w1",
+                my_hsv_hier_block_hist_concat,
+                qsd1_images,
+                use_grayscale=False,
+                save_as_pkl=True,
+                overwrite_pkl=True,
+            )
+            
+            map_results = {}
+            for k in TOPK:
+                map_results[f"mAP@K={k}"] = {}
+                for distance_function in distance_functions:
+                    results = retrieval(
+                        bbdd_rgb_descriptors,
+                        query_rgb_descriptors,
+                        distance_function,
+                        top_k=k,
+                    )
+                    map_results[f"mAP@K={k}"][distance_function.__name__] = mean_average_precision_K(results, gt, K=k)
+            print(f"WEEK 2: hsv_hier_block_hist_concat bins={bins} levels_grid={testing_level_grids[grid_idx]}")
+            print(pd.DataFrame(map_results))
+            print()
+            # END method hsv_hier_block_hist_concat
 
     # # Compute for TESTSET and save as pkl
     # pathlist = list(Path(Path(__file__).parent / "datasets" / "qst1_w1").glob("*.jpg"))
