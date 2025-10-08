@@ -9,6 +9,16 @@ from descriptors import (
     hsv_hier_block_hist_concat_func,
     hsv_block_hist_concat_func
 )
+from filtering import (
+        segment_rgb_double_threshold,
+        segment_rgb_threshold,
+        erode_mask,
+        dilate_mask,
+        compute_centroid,
+        get_center_and_crop,
+        get_center_and_mask_crop,
+        get_center_and_hollow_mask
+)
 from similarity import (
     compute_euclidean_distance,
     compute_manhattan_distance,
@@ -120,6 +130,45 @@ def main():
     qst1_images = {img_path.stem: cv2.imread(str(img_path)) for img_path in qst1_pathlist}
     qst2_images = {img_path.stem: cv2.imread(str(img_path)) for img_path in qst2_pathlist}
     qsd2_gt_masks = {img_path.stem: cv2.imread(str(img_path), cv2.IMREAD_GRAYSCALE) for img_path in qsd2_masks_pathlist}
+    # ---- APLICAR SEGMENTACIÓN Y MOSTRAR EJEMPLOS ----
+    print("Mostrando segmentación (doble threshold) de las 3 primeras imágenes...")
+    print(f"Total imágenes qsd2_images: {len(qsd2_images)}")
+    print("Ejemplo de claves:", list(qsd2_images.keys())[:3])
+
+    for i, (name, img) in enumerate(qsd2_images.items()):
+        if i >= 3:
+            break  # Solo las 3 primeras
+
+        # --- Segmentación ---
+        mask = segment_rgb_double_threshold(img, low_thresh=(50,50,50), high_thresh=(240,240,240))
+
+        # Invertir máscara si el fondo es blanco
+        mask = 255 - mask
+        #"""
+        # --- Morfología vectorizada ---
+        mask_clean = dilate_mask(mask, kernel_size=11)
+        
+        mask_clean = erode_mask(mask_clean, kernel_size=11)
+        #PARA VER LA IMAGEN A COLOR RECORTADA DESCOMENTAR:
+        #center, bbox, crop = get_center_and_crop(mask_clean,img, padding=10)
+        center, bbox, crop = get_center_and_hollow_mask(mask_clean, padding=10)
+
+        if center:
+            cx, cy = center
+            img_display = img.copy()
+            img_display[cy-2:cy+3, cx-2:cx+3] = [0,0,255]  # dibujar centroide
+            cv2.imshow("Original con centro", img_display)
+            cv2.imshow("Recorte dinámico", crop*255)
+            #PARA VER LA IMAGEN A COLOR RECORTADA DESCOMENTAR:
+            #cv2.imshow("Recorte dinámico", crop)
+            cv2.imshow("Máscara final", mask_clean)
+            cv2.waitKey(0)
+        """
+        cv2.imshow(f"Original con centro - {name}", img)
+        cv2.imshow(f"Segmentado - {name}", mask)
+        cv2.waitKey(0)
+        """
+    cv2.destroyAllWindows()
 
     """
     TODO WEEK 2 TASK 4:

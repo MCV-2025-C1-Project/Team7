@@ -71,4 +71,173 @@ def laplacian_filter(image: np.ndarray) -> np.ndarray:
 
     return output
 
+def segment_rgb_double_threshold(image_rgb, low_thresh=(80,80,80), high_thresh=(230,230,230)):
+    """
+    Segmenta un cuadro en RGB usando un rango por canal.
+    """
+    mask = (
+        (image_rgb[:, :, 0] >= low_thresh[0]) & (image_rgb[:, :, 0] <= high_thresh[0]) &
+        (image_rgb[:, :, 1] >= low_thresh[1]) & (image_rgb[:, :, 1] <= high_thresh[1]) &
+        (image_rgb[:, :, 2] >= low_thresh[2]) & (image_rgb[:, :, 2] <= high_thresh[2])
+    )
+    return mask.astype(np.uint8) * 255
+def segment_rgb_threshold(image_rgb, threshold=200):
+    """
+    Segmenta un cuadro en RGB usando un único threshold global.
+    """
+    mask = (image_rgb[:, :, 0] < threshold) & \
+           (image_rgb[:, :, 1] < threshold) & \
+           (image_rgb[:, :, 2] < threshold)
+    return mask.astype(np.uint8) * 255
+
+def erode_mask(mask, kernel_size=3):
+    """
+    Erosiona una máscara binaria de manera vectorizada.
+    """
+    pad = kernel_size // 2
+    padded = np.pad(mask, pad, mode='constant', constant_values=0)
+    H, W = mask.shape
+    shape = (H, W, kernel_size, kernel_size)
+    strides = padded.strides * 2
+    windows = np.lib.stride_tricks.as_strided(padded, shape=shape, strides=strides)
+    eroded = np.all(windows == 255, axis=(2,3)).astype(np.uint8) * 255
+    return eroded
+
+def dilate_mask(mask, kernel_size=3):
+    """
+    Dilata una máscara binaria de manera vectorizada.
+    """
+    pad = kernel_size // 2
+    padded = np.pad(mask, pad, mode='constant', constant_values=0)
+    H, W = mask.shape
+    shape = (H, W, kernel_size, kernel_size)
+    strides = padded.strides * 2
+    windows = np.lib.stride_tricks.as_strided(padded, shape=shape, strides=strides)
+    dilated = np.any(windows == 255, axis=(2,3)).astype(np.uint8) * 255
+    return dilated
+    
+def compute_centroid(mask):
+    """
+    Calcula el centroide de la máscara binaria.
+    """
+    ys, xs = np.where(mask > 0)
+    if len(xs) == 0:
+        return None
+    cx = int(np.mean(xs))
+    cy = int(np.mean(ys))
+    return (cx, cy)
+
+def get_center_and_crop(mask, img, padding=10):
+    """
+    Calcula el centroide, bounding box y recorte dinámico de un objeto en una máscara binaria.
+
+    Args:
+        mask (np.ndarray): máscara binaria del objeto (0 o 255)
+        img (np.ndarray): imagen original en BGR o RGB
+        padding (int): píxeles extra alrededor del bounding box
+
+    Returns:
+        center (tuple): (cx, cy) del centroide
+        bbox (tuple): (x_min, y_min, x_max, y_max) del bounding box
+        crop (np.ndarray): recorte de la imagen original
+    """
+    ys, xs = np.where(mask > 0)
+    if len(xs) == 0 or len(ys) == 0:
+        return None, None, None  # no se encontró objeto
+
+    # Bounding box
+    x_min, x_max = xs.min(), xs.max()
+    y_min, y_max = ys.min(), ys.max()
+
+    # Centroide
+    cx = int((x_min + x_max) / 2)
+    cy = int((y_min + y_max) / 2)
+    center = (cx, cy)
+
+    # Recorte dinámico con padding
+    x1 = max(0, x_min - padding)
+    x2 = min(img.shape[1], x_max + padding)
+    y1 = max(0, y_min - padding)
+    y2 = min(img.shape[0], y_max + padding)
+    crop = img[y1:y2, x1:x2]
+
+    bbox = (x_min, y_min, x_max, y_max)
+    return center, bbox, crop
+
+
+
+def get_center_and_mask_crop(mask, padding=10):
+    """
+    Calcula el centroide, bounding box y recorte de la máscara binaria.
+    No recorta la imagen, solo devuelve la máscara filtrada.
+
+    Args:
+        mask (np.ndarray): máscara binaria del objeto (0 o 255)
+        padding (int): píxeles extra alrededor del bounding box
+
+    Returns:
+        center (tuple): (cx, cy) del centroide relativo al recorte
+        bbox (tuple): (x_min, y_min, x_max, y_max) en coordenadas originales
+        mask_crop (np.ndarray): máscara recortada al bounding box con padding
+    """
+    ys, xs = np.where(mask > 0)
+    if len(xs) == 0 or len(ys) == 0:
+        return None, None, None  # no hay objeto
+
+    # Bounding box
+    x_min, x_max = xs.min(), xs.max()
+    y_min, y_max = ys.min(), ys.max()
+
+    # Aplicar padding
+    x1 = max(0, x_min - padding)
+    x2 = min(mask.shape[1], x_max + padding)
+    y1 = max(0, y_min - padding)
+    y2 = min(mask.shape[0], y_max + padding)
+
+    # Recorte de la máscara
+    mask_crop = mask[y1:y2, x1:x2]
+
+    # Centroide relativo al recorte
+    ys_crop, xs_crop = np.where(mask_crop > 0)
+    cx = int(xs_crop.mean())
+    cy = int(ys_crop.mean())
+    center = (cx, cy)
+
+    bbox = (x1, y1, x2, y2)
+    return center, bbox, mask_crop
+
+
+def get_center_and_hollow_mask(mask, padding=10):
+    """
+    Calcula el centroide, bounding box y máscara hueca (0 dentro del objeto, 1 fuera).
+
+    Args:
+        mask (np.ndarray): máscara binaria del objeto (0 o 255)
+        padding (int): píxeles extra alrededor del bounding box
+
+    Returns:
+        center (tuple): (cx, cy) del centroide del objeto original
+        bbox (tuple): (x_min, y_min, x_max, y_max) del bounding box con padding
+        mask_hollow (np.ndarray): máscara transformada (0 dentro del bounding box, 1 fuera)
+    """
+    ys, xs = np.where(mask > 0)
+    mask_hollow = np.zeros_like(mask, dtype=np.uint8)  # por defecto todo fuera = 0
+
+    if len(xs) == 0 or len(ys) == 0:
+        return None, None, mask_hollow  # no hay objeto
+
+    # Bounding box con padding
+    x_min, x_max = max(0, xs.min() - padding), min(mask.shape[1], xs.max() + padding)
+    y_min, y_max = max(0, ys.min() - padding), min(mask.shape[0], ys.max() + padding)
+
+    # Hueco en la máscara
+    mask_hollow[y_min:y_max, x_min:x_max] = 1
+
+    # Centroide del objeto original (no del hueco)
+    cx = int(xs.mean())
+    cy = int(ys.mean())
+    center = (cx, cy)
+
+    bbox = (x_min, y_min, x_max, y_max)
+    return center, bbox, mask_hollow
 #ADVO FIN : Laplacian Filter
