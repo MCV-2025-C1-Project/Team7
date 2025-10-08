@@ -180,10 +180,10 @@ def hsv_block_hist_concat_func(
     Returns:
         A callable function that takes an image and returns the concatenated histogram, with the specified bins and grid.
     """
-    def func(img_bgr: np.ndarray) -> np.ndarray:
+    def custom_hsv_block_hist_concat(img_bgr: np.ndarray) -> np.ndarray:
         return hsv_block_histogram_concat(img_bgr, bins, grid)
-    
-    return func
+
+    return custom_hsv_block_hist_concat
 
 
 def hsv_hierarchical_block_histogram_concat(
@@ -224,10 +224,10 @@ def hsv_hier_block_hist_concat_func(
     Returns:
         A callable function that takes an image and returns the concatenated histogram, with the specified bins and levels_grid.
     """
-    def func(img_bgr: np.ndarray) -> np.ndarray:
+    def custom_hsv_hier_block_hist_concat(img_bgr: np.ndarray) -> np.ndarray:
         return hsv_hierarchical_block_histogram_concat(img_bgr, bins, levels_grid)
-    
-    return func
+
+    return custom_hsv_hier_block_hist_concat
 
 
 def hsv_histogram_concat(img_bgr: np.ndarray, bins=[16, 16, 8]) -> np.ndarray:
