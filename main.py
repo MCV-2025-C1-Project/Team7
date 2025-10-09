@@ -28,7 +28,7 @@ from similarity import (
 )
 from retrieval import retrieval
 from metrics import mean_average_precision_K, BinaryMaskEvaluation
-from preprocess import preprocess_images
+from preprocess import preprocess_images, preprocess_images_for_segmentation
 import pandas as pd
 
 
@@ -135,9 +135,11 @@ def main():
     print(f"Total imágenes qsd2_images: {len(qsd2_images)}")
     print("Ejemplo de claves:", list(qsd2_images.keys())[:3])
 
-    for i, (name, img) in enumerate(qsd2_images.items()):
+    for i, (name, im) in enumerate(qsd2_images.items()):
         if i >= 3:
             break  # Solo las 3 primeras
+
+        img = preprocess_images_for_segmentation(im)
 
         # --- Segmentación ---
         mask = segment_rgb_double_threshold(img, low_thresh=(50,50,50), high_thresh=(240,240,240))
