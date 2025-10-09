@@ -106,30 +106,26 @@ def hsv_histogram(image: np.ndarray, bins=[16, 16, 8]) -> np.ndarray:
     assert len(bins) == 3, "Bins must be a list of three integers."
 
     img_hsv = cv2.cvtColor(image.astype(np.uint8), cv2.COLOR_BGR2HSV)
-    h_bins = bins[0]
-    s_bins = bins[1]
-    v_bins = bins[2]
+    
+    # Scale values to bin indices directly
+    h_scale = bins[0] / 256.0
+    s_scale = bins[1] / 256.0  
+    v_scale = bins[2] / 256.0
+    
+    h_idx = (img_hsv[:, :, 0] * h_scale).astype(np.int32)
+    s_idx = (img_hsv[:, :, 1] * s_scale).astype(np.int32)
+    v_idx = (img_hsv[:, :, 2] * v_scale).astype(np.int32)
+    
+    # Clamp to valid range
+    h_idx = np.clip(h_idx, 0, bins[0] - 1).ravel()
+    s_idx = np.clip(s_idx, 0, bins[1] - 1).ravel()
+    v_idx = np.clip(v_idx, 0, bins[2] - 1).ravel()
 
-    # Compute flattened values for each channel
-    H = img_hsv[:, :, 0].ravel()
-    S = img_hsv[:, :, 1].ravel()
-    V = img_hsv[:, :, 2].ravel()
-
-    # Compute bin edges for each channel
-    H_bin_edges = np.linspace(0, 256, h_bins + 1)
-    S_bin_edges = np.linspace(0, 256, s_bins + 1)
-    V_bin_edges = np.linspace(0, 256, v_bins + 1)
-
-    # Compute bin indices for each channel
-    H_idx = np.digitize(H, H_bin_edges) - 1
-    S_idx = np.digitize(S, S_bin_edges) - 1
-    V_idx = np.digitize(V, V_bin_edges) - 1
-
-    # Compute flattened histogram indices
-    flat_idx = H_idx * (s_bins * v_bins) + S_idx * v_bins + V_idx
-
-    # Get the output histogram by counting occurrences of each index
-    hist = np.bincount(flat_idx, minlength=h_bins * s_bins * v_bins).astype(np.float32)
+    # Compute linear indices
+    flat_idx = h_idx * (bins[1] * bins[2]) + s_idx * bins[2] + v_idx
+    
+    # Count occurrences
+    hist = np.bincount(flat_idx, minlength=bins[0] * bins[1] * bins[2]).astype(np.float32)
 
     return hist
 
@@ -153,19 +149,26 @@ def hsv_block_histogram_concat(
 
     # Compute height&width block size and initialize list for histograms
     h_block, w_block = image.shape[0] // grid[0], image.shape[1] // grid[1]
-    histograms = []
+    
+    # preallocate output array for efficiency
+    hist_size = bins[0] * bins[1] * bins[2]
+    total_blocks = grid[0] * grid[1]
+    histograms = np.empty(total_blocks * hist_size, dtype=np.float32)
 
+    block_idx = 0
     for i in range(grid[0]):
         for j in range(grid[1]):
             # get image block
             block = image[
-                i * h_block : (i + 1) * h_block, j * w_block : (j + 1) * w_block, :
+                i * h_block : (i + 1) * h_block, 
+                j * w_block : (j + 1) * w_block
             ]
             # compute histogram for block and append to list
             hist = hsv_histogram(block, bins)
-            histograms.append(hist)
+            histograms[block_idx * hist_size : (block_idx + 1) * hist_size] = hist
+            block_idx += 1
 
-    return np.concatenate(histograms).astype(np.float32)
+    return histograms
 
 
 def hsv_block_hist_concat_func(
@@ -203,13 +206,18 @@ def hsv_hierarchical_block_histogram_concat(
     assert len(bins) == 3, "Bins must be a list of three integers."
     assert all(len(grid) == 2 for grid in levels_grid), "Each grid must be a tuple of two integers (rows, cols)."
     
-    histograms = []
+    # preallocate output array for efficiency
+    hist_size = bins[0] * bins[1] * bins[2]
+    total_blocks = sum(grid[0] * grid[1] for grid in levels_grid)
+    histograms = np.empty(total_blocks * hist_size, dtype=np.float32)
 
+    block_idx = 0
     for grid in levels_grid:
         hist = hsv_block_histogram_concat(img_bgr, bins, grid)
-        histograms.append(hist)
+        histograms[block_idx * hist_size : (block_idx + 1) * hist_size] = hist
+        block_idx += 1
 
-    return np.concatenate(histograms).astype(np.float32)
+    return histograms
 
 
 def hsv_hier_block_hist_concat_func(

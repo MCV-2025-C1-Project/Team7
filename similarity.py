@@ -12,11 +12,7 @@ def compute_euclidean_distance(
     Returns:
         A float representing the Euclidean distance between the two descriptors.
     """
-
-    acum = 0.0
-    for h1, h2 in zip(descriptor1, descriptor2):
-        acum += (h1 - h2) ** 2
-    return np.sqrt(acum)
+    return float(np.linalg.norm(descriptor1 - descriptor2))
 
 
 def compute_manhattan_distance(
@@ -30,11 +26,7 @@ def compute_manhattan_distance(
     Returns:
         A float representing the Manhattan distance between the two descriptors.
     """
-
-    acum = 0.0
-    for h1, h2 in zip(descriptor1, descriptor2):
-        acum += abs(h1 - h2)
-    return acum
+    return np.sum(np.abs(descriptor1 - descriptor2))
 
 
 def compute_x2_distance(descriptor1: np.ndarray, descriptor2: np.ndarray) -> float:
@@ -46,12 +38,7 @@ def compute_x2_distance(descriptor1: np.ndarray, descriptor2: np.ndarray) -> flo
     Returns:
         A float representing the X^2 distance between the two descriptors.
     """
-
-    acum = 0.0
-    for h1, h2 in zip(descriptor1, descriptor2):
-        if h1 + h2 != 0:
-            acum += ((h1 - h2) ** 2) / (h1 + h2)
-    return acum
+    return float(np.sum(((descriptor1 - descriptor2) ** 2) / (descriptor1 + descriptor2 + 1e-10)))
 
 
 def compute_histogram_intersection(
@@ -65,11 +52,7 @@ def compute_histogram_intersection(
     Returns:
         A float representing the histogram intersection between the two descriptors.
     """
-
-    acum = 0.0
-    for h1, h2 in zip(descriptor1, descriptor2):
-        acum += min(h1, h2)
-    return acum
+    return float(np.sum(np.minimum(descriptor1, descriptor2)))
 
 
 def compute_hellinger_distance(
@@ -83,8 +66,4 @@ def compute_hellinger_distance(
     Returns:
         A float representing the Hellinger distance between the two descriptors.
     """
-
-    acum = 0.0
-    for h1, h2 in zip(descriptor1, descriptor2):
-        acum += (np.sqrt(h1) - np.sqrt(h2)) ** 2
-    return (1 / np.sqrt(2)) * np.sqrt(acum)
+    return float(np.sqrt(1 - np.sum(np.sqrt(descriptor1 * descriptor2))))
