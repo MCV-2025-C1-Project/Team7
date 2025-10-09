@@ -66,4 +66,9 @@ def compute_hellinger_distance(
     Returns:
         A float representing the Hellinger distance between the two descriptors.
     """
-    return float(np.sqrt(1 - np.sum(np.sqrt(descriptor1 * descriptor2))))
+    # Ensure non-negative values before square root
+    desc1_safe = np.maximum(descriptor1, 0)
+    desc2_safe = np.maximum(descriptor2, 0)
+
+    sqrt_diff = np.sqrt(desc1_safe) - np.sqrt(desc2_safe)
+    return float((1 / np.sqrt(2)) * np.sqrt(np.sum(sqrt_diff ** 2)))
