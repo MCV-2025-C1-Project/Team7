@@ -9,16 +9,6 @@ from descriptors import (
     hsv_hier_block_hist_concat_func,
     hsv_block_hist_concat_func
 )
-from filtering import (
-        segment_rgb_double_threshold,
-        segment_rgb_threshold,
-        erode_mask,
-        dilate_mask,
-        compute_centroid,
-        get_center_and_crop,
-        get_center_and_mask_crop,
-        get_center_and_hollow_mask
-)
 from similarity import (
     compute_euclidean_distance,
     compute_manhattan_distance,
@@ -26,9 +16,10 @@ from similarity import (
     compute_histogram_intersection,
     compute_hellinger_distance,
 )
+from segmentation import compute_binary_mask
 from retrieval import retrieval
-from metrics import mean_average_precision_K, BinaryMaskEvaluation
 from preprocess import preprocess_images, preprocess_images_for_segmentation
+from metrics import mean_average_precision_K, binary_mask_evaluation
 import pandas as pd
 
 
@@ -108,14 +99,14 @@ def main():
     # 1) Load all images paths
     if test_mode:
         qsd1_pathlist = list(Path(Path(__file__).parent / "datasets" / "qsd1_w1").glob("*.jpg"))[:5]
-        qsd2_pathlist = list(Path(Path(__file__).parent / "datasets" / "qsd2_w2").glob("*.jpg"))[:5]
-        qsd2_masks_pathlist = list(Path(Path(__file__).parent / "datasets" / "qsd2_w2").glob("*.png"))[:5]
+        qsd2_pathlist = list(Path(Path(__file__).parent / "datasets" / "qsd2_w1").glob("*.jpg"))[:5]
+        qsd2_masks_pathlist = list(Path(Path(__file__).parent / "datasets" / "qsd2_w1").glob("*.png"))[:5]
         qst1_pathlist = list(Path(Path(__file__).parent / "datasets" / "qst1_w1").glob("*.jpg"))[:5]
         qst2_pathlist = list(Path(Path(__file__).parent / "datasets" / "qst2_w2").glob("*.jpg"))[:5]
     else:
         qsd1_pathlist = list(Path(Path(__file__).parent / "datasets" / "qsd1_w1").glob("*.jpg"))
-        qsd2_pathlist = list(Path(Path(__file__).parent / "datasets" / "qsd2_w2").glob("*.jpg"))
-        qsd2_masks_pathlist = list(Path(Path(__file__).parent / "datasets" / "qsd2_w2").glob("*.png"))
+        qsd2_pathlist = list(Path(Path(__file__).parent / "datasets" / "qsd2_w1").glob("*.jpg"))
+        qsd2_masks_pathlist = list(Path(Path(__file__).parent / "datasets" / "qsd2_w1").glob("*.png"))
         qst1_pathlist = list(Path(Path(__file__).parent / "datasets" / "qst1_w1").glob("*.jpg"))
         qst2_pathlist = list(Path(Path(__file__).parent / "datasets" / "qst2_w2").glob("*.jpg"))
     bbdd_pathlist = list(Path(Path(__file__).parent / "datasets" / "BBDD").glob("*.jpg"))
@@ -130,66 +121,7 @@ def main():
     qst1_images = {img_path.stem: cv2.imread(str(img_path)) for img_path in qst1_pathlist}
     qst2_images = {img_path.stem: cv2.imread(str(img_path)) for img_path in qst2_pathlist}
     qsd2_gt_masks = {img_path.stem: cv2.imread(str(img_path), cv2.IMREAD_GRAYSCALE) for img_path in qsd2_masks_pathlist}
-    # ---- APLICAR SEGMENTACIÓN Y MOSTRAR EJEMPLOS ----
-    print("Mostrando segmentación (doble threshold) de las 3 primeras imágenes...")
-    print(f"Total imágenes qsd2_images: {len(qsd2_images)}")
-    print("Ejemplo de claves:", list(qsd2_images.keys())[:3])
-
-    for i, (name, im) in enumerate(qsd2_images.items()):
-        if i >= 3:
-            break  # Solo las 3 primeras
-
-        img = preprocess_images_for_segmentation(im)
-
-        # --- Segmentación ---
-        mask = segment_rgb_double_threshold(img, low_thresh=(50,50,50), high_thresh=(240,240,240))
-
-        # Invertir máscara si el fondo es blanco
-        mask = 255 - mask
-        #"""
-        # --- Morfología vectorizada ---
-        mask_clean = dilate_mask(mask, kernel_size=11)
         
-        mask_clean = erode_mask(mask_clean, kernel_size=11)
-        #PARA VER LA IMAGEN A COLOR RECORTADA DESCOMENTAR:
-        #center, bbox, crop = get_center_and_crop(mask_clean,img, padding=10)
-        center, bbox, crop = get_center_and_hollow_mask(mask_clean, padding=10)
-
-        if center:
-            cx, cy = center
-            img_display = img.copy()
-            img_display[cy-2:cy+3, cx-2:cx+3] = [0,0,255]  # dibujar centroide
-            cv2.imshow("Original con centro", img_display)
-            cv2.imshow("Recorte dinámico", crop*255)
-            #PARA VER LA IMAGEN A COLOR RECORTADA DESCOMENTAR:
-            #cv2.imshow("Recorte dinámico", crop)
-            cv2.imshow("Máscara final", mask_clean)
-            cv2.waitKey(0)
-        """
-        cv2.imshow(f"Original con centro - {name}", img)
-        cv2.imshow(f"Segmentado - {name}", mask)
-        cv2.waitKey(0)
-        """
-    cv2.destroyAllWindows()
-
-    """
-    TODO WEEK 2 TASK 4:
-        - Compute binary masks of query_images
-        - loop through query_gt_masks and the computed binary masks calling metrics.BinaryMaskEvaluation
-        possible pseudocode:
-            average_metrics = {}
-            binary_masks, cropped_images = segment_background(qsd2_images)
-            for img_name in qsd2_gt_masks.keys():
-                result = BinaryMaskEvaluation(binary_masks[img_name], qsd2_gt_masks[img_name])
-                for key in average_metrics.keys():
-                    if key not in average_metrics:
-                        average_metrics[key] = 0.0
-                    average_metrics[key] += result[key]
-            for key in average_metrics.keys():
-                average_metrics[key] /= len(qsd2_gt_masks)
-            print(average_metrics)
-    """
-    
     # 2) Preprocess all images with the same preprocessing method (resize 256x256, color balance, contrast&brightness adjustment, smoothing)
     lists_to_preprocess = [bbdd_images, qsd1_images, qst1_images]
     for i in range(len(lists_to_preprocess)):
@@ -275,6 +207,24 @@ def main():
                         map_results, open(result_pkl_filename, "wb")
                     )
                 # END method hsv_hier_block_hist_concat
+                
+    # WEEK 2: Segmentation
+    precision, recall, F1 = 0, 0, 0
+    for name, img in qsd2_images.items():
+        
+        mask = compute_binary_mask(img)
+        mask_gt = qsd2_gt_masks[name]
+        
+        metrics = binary_mask_evaluation(mask, mask_gt)
+        
+        precision += metrics['precision']
+        recall += metrics['recall']
+        F1 += metrics['F1']
+    
+    avg_precision = precision / len(qsd2_images)
+    avg_recall = recall / len(qsd2_images)
+    avg_F1 = F1 / len(qsd2_images)
+    print(f"WEEK 2: Binary Mask metrics: Precision: {avg_precision}. Recall: {avg_recall}. F1-measure: {avg_F1}.")
 
 if __name__ == "__main__":
     main()

@@ -36,7 +36,7 @@ def mean_average_precision_K(
 
 
 
-def BinaryMaskEvaluation(mask: np.ndarray, gt: np.ndarray):
+def binary_mask_evaluation(mask: np.ndarray, gt: np.ndarray):
     """
     Computes the precision, recall and F1-measure of a binary mask
     Args:
