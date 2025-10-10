@@ -1,7 +1,6 @@
 from pathlib import Path
 import pickle
 import cv2
-
 from descriptors import (
     compute_descriptors,
     hsv_histogram_concat,
@@ -15,12 +14,13 @@ from similarity import (
     compute_histogram_intersection,
     compute_hellinger_distance,
 )
-from segmentation import compute_binary_mask
+from segmentation import compute_binary_mask_1, compute_binary_mask_2
 from retrieval import retrieval
 from preprocess import preprocess_images, preprocess_images_for_segmentation
 from metrics import mean_average_precision_K, binary_mask_evaluation
 import pandas as pd
 import numpy as np
+import matplotlib.pyplot as plt
 
 def compute_retrieval_template(
     bbdd_images,
@@ -120,6 +120,36 @@ def main():
     qst1_images = {img_path.stem: cv2.imread(str(img_path)) for img_path in qst1_pathlist}
     qst2_images = {img_path.stem: cv2.imread(str(img_path)) for img_path in qst2_pathlist}
     qsd2_gt_masks = {img_path.stem: cv2.imread(str(img_path), cv2.IMREAD_GRAYSCALE) for img_path in qsd2_masks_pathlist}
+    
+    precision, recall, F1 = 0, 0, 0
+    qsd2_masked_images = {}
+    for name, img in qsd2_images.items():
+        
+        mask = compute_binary_mask_1(img)
+        mask_gt = qsd2_gt_masks[name]
+        
+        plt.imshow(img)
+        plt.show()
+        plt.imshow(mask, cmap="grey")
+        plt.show()
+        
+        mask_bool = mask > 0
+        masked_rgb = img * mask_bool[:, :, np.newaxis]
+        qsd2_masked_images[name] = masked_rgb
+        
+        plt.imshow(masked_rgb)
+        plt.show()
+        
+        metrics = binary_mask_evaluation(mask, mask_gt)
+        
+        precision += metrics['precision']
+        recall += metrics['recall']
+        F1 += metrics['F1']
+    
+    avg_precision = precision / len(qsd2_images)
+    avg_recall = recall / len(qsd2_images)
+    avg_F1 = F1 / len(qsd2_images)
+    print(f"WEEK 2: Binary Mask metrics: Precision: {avg_precision}. Recall: {avg_recall}. F1-measure: {avg_F1}.")
             
     # 2) Preprocess all images with the same preprocessing method (resize 256x256, color balance, contrast&brightness adjustment, smoothing)
     lists_to_preprocess = [bbdd_images, qsd1_images, qst1_images]
@@ -208,27 +238,7 @@ def main():
                 # END method hsv_hier_block_hist_concat
                 
     # WEEK 2: Segmentation
-    precision, recall, F1 = 0, 0, 0
-    qsd2_masked_images = {}
-    for name, img in qsd2_images.items():
-        
-        mask = compute_binary_mask(img)
-        mask_gt = qsd2_gt_masks[name]
-        
-        mask_bool = mask > 0
-        masked_rgb = img * mask_bool[:, :, np.newaxis]
-        qsd2_masked_images[name] = masked_rgb
-        
-        metrics = binary_mask_evaluation(mask, mask_gt)
-        
-        precision += metrics['precision']
-        recall += metrics['recall']
-        F1 += metrics['F1']
-    
-    avg_precision = precision / len(qsd2_images)
-    avg_recall = recall / len(qsd2_images)
-    avg_F1 = F1 / len(qsd2_images)
-    print(f"WEEK 2: Binary Mask metrics: Precision: {avg_precision}. Recall: {avg_recall}. F1-measure: {avg_F1}.")
+
 
 if __name__ == "__main__":
     main()
