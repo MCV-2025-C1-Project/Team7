@@ -129,17 +129,19 @@ def plot_method_comparison(df, save_plots=True, save_dir: Path = Path("./plots")
             # Best distance function performance
             best_perf = metric_data.groupby(['bins', 'grid'])['score'].max().reset_index()
             pivot_best = best_perf.pivot(index='bins', columns='grid', values='score')
+            pivot_best = pivot_best.reindex(index=[str(b) for b in TS_BINS], columns=[str(g) for g in TS_GRIDS])
             
             sns.heatmap(pivot_best, annot=True, fmt='.3f', cmap='viridis', 
-                       ax=axes[0, i], cbar_kws={'label': 'mAP Score'})
+                       ax=axes[0, i], cbar_kws={'label': 'mAP Score'}, vmin=0, vmax=1)
             axes[0, i].set_title(f'{map_metric} - Best Performance\n(Block Histogram)')
             
             # Manhattan distance performance (usually performs well)
             manhattan_data = metric_data[metric_data['distance_function'] == 'compute_manhattan_distance']
             if not manhattan_data.empty:
                 pivot_manhattan = manhattan_data.pivot(index='bins', columns='grid', values='score')
+                pivot_manhattan = pivot_manhattan.reindex(index=[str(b) for b in TS_BINS], columns=[str(g) for g in TS_GRIDS])
                 sns.heatmap(pivot_manhattan, annot=True, fmt='.3f', cmap='plasma', 
-                           ax=axes[1, i], cbar_kws={'label': 'mAP Score'})
+                           ax=axes[1, i], cbar_kws={'label': 'mAP Score'}, vmin=0, vmax=1)
                 axes[1, i].set_title(f'{map_metric} - Manhattan Distance\n(Block Histogram)')
         
         plt.tight_layout()
@@ -147,6 +149,36 @@ def plot_method_comparison(df, save_plots=True, save_dir: Path = Path("./plots")
             plt.savefig(save_dir / 'block_histogram_heatmaps.png', dpi=300, bbox_inches='tight')
         plt.show()
     
+    block_data = df[df['method'] == 'hsv_hier_block_hist_concat']
+    if not block_data.empty:
+        _, axes = plt.subplots(2, 3, figsize=(18, 12))
+        
+        for i, map_metric in enumerate(['mAP@K=1', 'mAP@K=5', 'mAP@K=10']):
+            metric_data = block_data[block_data['map_metric'] == map_metric]
+            
+            # Best distance function performance
+            best_perf = metric_data.groupby(['bins', 'grid'])['score'].max().reset_index()
+            pivot_best = best_perf.pivot(index='bins', columns='grid', values='score')
+            pivot_best = pivot_best.reindex(index=[str(b) for b in TS_BINS], columns=[str(g) for g in TS_LEVEL_GRIDS])
+            
+            sns.heatmap(pivot_best, annot=True, fmt='.3f', cmap='viridis', 
+                       ax=axes[0, i], cbar_kws={'label': 'mAP Score'}, vmin=0, vmax=1)
+            axes[0, i].set_title(f'{map_metric} - Best Performance\n(Hierarchical Block Histogram)')
+            
+            # Manhattan distance performance (usually performs well)
+            manhattan_data = metric_data[metric_data['distance_function'] == 'compute_manhattan_distance']
+            if not manhattan_data.empty:
+                pivot_manhattan = manhattan_data.pivot(index='bins', columns='grid', values='score')
+                pivot_manhattan = pivot_manhattan.reindex(index=[str(b) for b in TS_BINS], columns=[str(g) for g in TS_LEVEL_GRIDS])
+                sns.heatmap(pivot_manhattan, annot=True, fmt='.3f', cmap='plasma', 
+                           ax=axes[1, i], cbar_kws={'label': 'mAP Score'}, vmin=0, vmax=1)
+                axes[1, i].set_title(f'{map_metric} - Manhattan Distance\n(Hierarchical Block Histogram)')
+
+        plt.tight_layout()
+        if save_plots:
+            plt.savefig(save_dir / 'hierarchical_block_histogram_heatmaps.png', dpi=300, bbox_inches='tight')
+        plt.show()
+
     # 3. Distance function comparison
     _, axes = plt.subplots(1, 3, figsize=(18, 6))
 
@@ -183,6 +215,19 @@ def plot_method_comparison(df, save_plots=True, save_dir: Path = Path("./plots")
     for _, row in top_configs.iterrows():
         print(f"{row['method']} | bins={row['bins']} | grid={row['grid']} | "
               f"{row['distance_function']} | {row['map_metric']}: {row['score']:.4f}")
+    
+    print("\n=== TOP 10 CONFIGURATIONS PER METHOD ===")
+    for method in df['method'].unique():
+        if method == 'hsv_histogram_concat':
+            continue  # Skip baseline
+        method_data = df[df['method'] == method]
+        top_method_configs = method_data.groupby(['bins', 'grid', 'distance_function', 'map_metric'])['score'].first().reset_index()
+        top_method_configs = top_method_configs.sort_values('score', ascending=False).head(10)
+        
+        print(f"\n--- {method} ---")
+        for _, row in top_method_configs.iterrows():
+            print(f"bins={row['bins']} | grid={row['grid']} | "
+                  f"{row['distance_function']} | {row['map_metric']}: {row['score']:.4f}")
 
 def plot_parameter_sensitivity(df, save_plots=True, save_dir: Path = Path("./plots")):
     """Plot how performance changes with different parameters"""
