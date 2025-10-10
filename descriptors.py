@@ -127,7 +127,7 @@ def hsv_histogram(image: np.ndarray, bins=[16, 16, 8]) -> np.ndarray:
     # Count occurrences
     hist = np.bincount(flat_idx, minlength=bins[0] * bins[1] * bins[2]).astype(np.float32)
 
-    return hist
+    return hist / (hist.sum() + 1e-8)  # Normalize histogram
 
 def hsv_block_histogram_concat(
     image: np.ndarray,
@@ -214,8 +214,9 @@ def hsv_hierarchical_block_histogram_concat(
     block_idx = 0
     for grid in levels_grid:
         hist = hsv_block_histogram_concat(img_bgr, bins, grid)
-        histograms[block_idx * hist_size : (block_idx + 1) * hist_size] = hist
-        block_idx += 1
+        num_blocks = grid[0] * grid[1]
+        histograms[block_idx * hist_size : (block_idx + num_blocks) * hist_size] = hist
+        block_idx += num_blocks
 
     return histograms
 
@@ -276,7 +277,8 @@ def hsv_histogram_concat(img_bgr: np.ndarray, bins=[16, 16, 8]) -> np.ndarray:
     for idx in V_idx:
         V_hist[idx] += 1
 
-    return np.concatenate([H_hist, S_hist, V_hist]).astype(np.float32)
+    hist = np.concatenate([H_hist, S_hist, V_hist]).astype(np.float32)
+    return hist / (hist.sum() + 1e-8)  # Normalize histogram
 
 
 def cumsum(a):
