@@ -3,6 +3,7 @@ import numpy as np
 from filtering import laplacian_filter
 from tqdm import tqdm
 
+
 def preprocess_images(images: dict[str, np.ndarray]) -> dict[str, np.ndarray]:
     for img_name, img in images.items():
         # a) Resize coherent
@@ -46,12 +47,13 @@ def preprocess_images_laplacian(images: dict[str, np.ndarray]) -> dict[str, np.n
         images[img_name] = lap_edges
     return images
 
+
 def preprocess_images_for_segmentation(img):
     # 1. Convertir a escala de grisos o HSV
     gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
 
     # 2. Reduir soroll
-    blur = cv2.GaussianBlur(gray, (5,5), 0)
+    blur = cv2.GaussianBlur(gray, (5, 5), 0)
 
     # 3. Millorar contrast
     equalized = cv2.equalizeHist(blur)

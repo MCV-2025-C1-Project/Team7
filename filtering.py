@@ -39,7 +39,7 @@ def apply_filters(
     return images
 
 
-#ADVO INI : Laplacian Filter
+# ADVO INI : Laplacian Filter
 def laplacian_filter(image: np.ndarray) -> np.ndarray:
     """
     Aplica un filtro Laplaciano manual para detectar bordes en una imagen en escala de grises.
@@ -50,72 +50,81 @@ def laplacian_filter(image: np.ndarray) -> np.ndarray:
         Imagen filtrada (bordes resaltados) como un array numpy.
     """
 
-    kernel = np.array([
-        [0,  1,  0],
-        [1, -4,  1],
-        [0,  1,  0]
-    ])
+    kernel = np.array([[0, 1, 0], [1, -4, 1], [0, 1, 0]])
 
     image = image.astype(np.float32)
 
-    padded = np.pad(image, pad_width=1, mode='reflect')
+    padded = np.pad(image, pad_width=1, mode="reflect")
 
     output = np.zeros_like(image)
 
     for i in range(image.shape[0]):
         for j in range(image.shape[1]):
-            region = padded[i:i+3, j:j+3]
+            region = padded[i : i + 3, j : j + 3]
             output[i, j] = np.sum(region * kernel)
 
     output = np.clip(output, 0, 255).astype(np.uint8)
 
     return output
 
-def segment_rgb_double_threshold(image_rgb, low_thresh=(80,80,80), high_thresh=(230,230,230)):
+
+def segment_rgb_double_threshold(
+    image_rgb, low_thresh=(80, 80, 80), high_thresh=(230, 230, 230)
+):
     """
     Segmenta un cuadro en RGB usando un rango por canal.
     """
     mask = (
-        (image_rgb[:, :, 0] >= low_thresh[0]) & (image_rgb[:, :, 0] <= high_thresh[0]) &
-        (image_rgb[:, :, 1] >= low_thresh[1]) & (image_rgb[:, :, 1] <= high_thresh[1]) &
-        (image_rgb[:, :, 2] >= low_thresh[2]) & (image_rgb[:, :, 2] <= high_thresh[2])
+        (image_rgb[:, :, 0] >= low_thresh[0])
+        & (image_rgb[:, :, 0] <= high_thresh[0])
+        & (image_rgb[:, :, 1] >= low_thresh[1])
+        & (image_rgb[:, :, 1] <= high_thresh[1])
+        & (image_rgb[:, :, 2] >= low_thresh[2])
+        & (image_rgb[:, :, 2] <= high_thresh[2])
     )
     return mask.astype(np.uint8) * 255
+
+
 def segment_rgb_threshold(image_rgb, threshold=200):
     """
     Segmenta un cuadro en RGB usando un único threshold global.
     """
-    mask = (image_rgb[:, :, 0] < threshold) & \
-           (image_rgb[:, :, 1] < threshold) & \
-           (image_rgb[:, :, 2] < threshold)
+    mask = (
+        (image_rgb[:, :, 0] < threshold)
+        & (image_rgb[:, :, 1] < threshold)
+        & (image_rgb[:, :, 2] < threshold)
+    )
     return mask.astype(np.uint8) * 255
+
 
 def erode_mask(mask, kernel_size=3):
     """
     Erosiona una máscara binaria de manera vectorizada.
     """
     pad = kernel_size // 2
-    padded = np.pad(mask, pad, mode='constant', constant_values=0)
+    padded = np.pad(mask, pad, mode="constant", constant_values=0)
     H, W = mask.shape
     shape = (H, W, kernel_size, kernel_size)
     strides = padded.strides * 2
     windows = np.lib.stride_tricks.as_strided(padded, shape=shape, strides=strides)
-    eroded = np.all(windows == 255, axis=(2,3)).astype(np.uint8) * 255
+    eroded = np.all(windows == 255, axis=(2, 3)).astype(np.uint8) * 255
     return eroded
+
 
 def dilate_mask(mask, kernel_size=3):
     """
     Dilata una máscara binaria de manera vectorizada.
     """
     pad = kernel_size // 2
-    padded = np.pad(mask, pad, mode='constant', constant_values=0)
+    padded = np.pad(mask, pad, mode="constant", constant_values=0)
     H, W = mask.shape
     shape = (H, W, kernel_size, kernel_size)
     strides = padded.strides * 2
     windows = np.lib.stride_tricks.as_strided(padded, shape=shape, strides=strides)
-    dilated = np.any(windows == 255, axis=(2,3)).astype(np.uint8) * 255
+    dilated = np.any(windows == 255, axis=(2, 3)).astype(np.uint8) * 255
     return dilated
-    
+
+
 def compute_centroid(mask):
     """
     Calcula el centroide de la máscara binaria.
@@ -126,6 +135,7 @@ def compute_centroid(mask):
     cx = int(np.mean(xs))
     cy = int(np.mean(ys))
     return (cx, cy)
+
 
 def get_center_and_crop(mask, img, padding=10):
     """
@@ -163,7 +173,6 @@ def get_center_and_crop(mask, img, padding=10):
 
     bbox = (x_min, y_min, x_max, y_max)
     return center, bbox, crop
-
 
 
 def get_center_and_mask_crop(mask, padding=10):
@@ -240,4 +249,6 @@ def get_center_and_hollow_mask(mask, padding=10):
 
     bbox = (x_min, y_min, x_max, y_max)
     return center, bbox, mask_hollow
-#ADVO FIN : Laplacian Filter
+
+
+# ADVO FIN : Laplacian Filter

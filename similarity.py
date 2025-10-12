@@ -38,7 +38,9 @@ def compute_x2_distance(descriptor1: np.ndarray, descriptor2: np.ndarray) -> flo
     Returns:
         A float representing the X^2 distance between the two descriptors.
     """
-    return float(np.sum(((descriptor1 - descriptor2) ** 2) / (descriptor1 + descriptor2 + 1e-10)))
+    return float(
+        np.sum(((descriptor1 - descriptor2) ** 2) / (descriptor1 + descriptor2 + 1e-10))
+    )
 
 
 def compute_histogram_intersection(
@@ -71,4 +73,4 @@ def compute_hellinger_distance(
     desc2_safe = np.maximum(descriptor2, 0)
 
     sqrt_diff = np.sqrt(desc1_safe) - np.sqrt(desc2_safe)
-    return float((1 / np.sqrt(2)) * np.sqrt(np.sum(sqrt_diff ** 2)))
+    return float((1 / np.sqrt(2)) * np.sqrt(np.sum(sqrt_diff**2)))

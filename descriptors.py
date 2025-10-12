@@ -1,12 +1,12 @@
 from collections.abc import Callable
 
 import numpy as np
+
 # import tqdm
 from pathlib import Path
 import pickle
 
 import cv2
-
 
 
 def grayscale_histogram(image: np.ndarray, bins: int = 256) -> np.ndarray:
@@ -106,16 +106,16 @@ def hsv_histogram(image: np.ndarray, bins=[16, 16, 8]) -> np.ndarray:
     assert len(bins) == 3, "Bins must be a list of three integers."
 
     img_hsv = cv2.cvtColor(image.astype(np.uint8), cv2.COLOR_BGR2HSV)
-    
+
     # Scale values to bin indices directly
     h_scale = bins[0] / 256.0
-    s_scale = bins[1] / 256.0  
+    s_scale = bins[1] / 256.0
     v_scale = bins[2] / 256.0
-    
+
     h_idx = (img_hsv[:, :, 0] * h_scale).astype(np.int32)
     s_idx = (img_hsv[:, :, 1] * s_scale).astype(np.int32)
     v_idx = (img_hsv[:, :, 2] * v_scale).astype(np.int32)
-    
+
     # Clamp to valid range
     h_idx = np.clip(h_idx, 0, bins[0] - 1).ravel()
     s_idx = np.clip(s_idx, 0, bins[1] - 1).ravel()
@@ -123,16 +123,17 @@ def hsv_histogram(image: np.ndarray, bins=[16, 16, 8]) -> np.ndarray:
 
     # Compute linear indices
     flat_idx = h_idx * (bins[1] * bins[2]) + s_idx * bins[2] + v_idx
-    
+
     # Count occurrences
-    hist = np.bincount(flat_idx, minlength=bins[0] * bins[1] * bins[2]).astype(np.float32)
+    hist = np.bincount(flat_idx, minlength=bins[0] * bins[1] * bins[2]).astype(
+        np.float32
+    )
 
     return hist / (hist.sum() + 1e-8)  # Normalize histogram
 
+
 def hsv_block_histogram_concat(
-    image: np.ndarray,
-    bins: list[int],
-    grid: tuple[int, int]
+    image: np.ndarray, bins: list[int], grid: tuple[int, int]
 ) -> np.ndarray:
     """
     Compute the concatenated HSV histograms of image blocks. Uses the function hsv_histogram.
@@ -149,7 +150,7 @@ def hsv_block_histogram_concat(
 
     # Compute height&width block size and initialize list for histograms
     h_block, w_block = image.shape[0] // grid[0], image.shape[1] // grid[1]
-    
+
     # preallocate output array for efficiency
     hist_size = bins[0] * bins[1] * bins[2]
     total_blocks = grid[0] * grid[1]
@@ -160,8 +161,7 @@ def hsv_block_histogram_concat(
         for j in range(grid[1]):
             # get image block
             block = image[
-                i * h_block : (i + 1) * h_block, 
-                j * w_block : (j + 1) * w_block
+                i * h_block : (i + 1) * h_block, j * w_block : (j + 1) * w_block
             ]
             # compute histogram for block and append to list
             hist = hsv_histogram(block, bins)
@@ -172,8 +172,7 @@ def hsv_block_histogram_concat(
 
 
 def hsv_block_hist_concat_func(
-    bins: list[int] = [16, 16, 8],
-    grid: tuple[int, int] = (2, 2)
+    bins: list[int] = [16, 16, 8], grid: tuple[int, int] = (2, 2)
 ) -> Callable[[np.ndarray], np.ndarray]:
     """
     Wrapper function that returns the function hsv_block_histogram_concat but with the desired bins and grid parameters set.
@@ -183,6 +182,7 @@ def hsv_block_hist_concat_func(
     Returns:
         A callable function that takes an image and returns the concatenated histogram, with the specified bins and grid.
     """
+
     def custom_hsv_block_hist_concat(img_bgr: np.ndarray) -> np.ndarray:
         return hsv_block_histogram_concat(img_bgr, bins, grid)
 
@@ -190,8 +190,7 @@ def hsv_block_hist_concat_func(
 
 
 def hsv_hierarchical_block_histogram_concat(
-    img_bgr: np.ndarray, bins: list[int],
-    levels_grid: list[tuple[int, int]]
+    img_bgr: np.ndarray, bins: list[int], levels_grid: list[tuple[int, int]]
 ) -> np.ndarray:
     """
     Compute the concatenated HSV histograms of hierarchical image blocks. Uses the function hsv_block_histogram_concat.
@@ -204,8 +203,10 @@ def hsv_hierarchical_block_histogram_concat(
     """
     assert img_bgr.shape[2] == 3, "Input image must have 3 channels (BGR format)."
     assert len(bins) == 3, "Bins must be a list of three integers."
-    assert all(len(grid) == 2 for grid in levels_grid), "Each grid must be a tuple of two integers (rows, cols)."
-    
+    assert all(len(grid) == 2 for grid in levels_grid), (
+        "Each grid must be a tuple of two integers (rows, cols)."
+    )
+
     # preallocate output array for efficiency
     hist_size = bins[0] * bins[1] * bins[2]
     total_blocks = sum(grid[0] * grid[1] for grid in levels_grid)
@@ -223,7 +224,7 @@ def hsv_hierarchical_block_histogram_concat(
 
 def hsv_hier_block_hist_concat_func(
     bins: list[int] = [16, 16, 8],
-    levels_grid: list[tuple[int, int]] = [(1, 1), (2, 2), (3, 3)]
+    levels_grid: list[tuple[int, int]] = [(1, 1), (2, 2), (3, 3)],
 ) -> Callable[[np.ndarray], np.ndarray]:
     """
     Wrapper function that returns the function hsv_hierarchical_block_histogram_concat but with the desired bins and levels_grid parameters set.
@@ -233,6 +234,7 @@ def hsv_hier_block_hist_concat_func(
     Returns:
         A callable function that takes an image and returns the concatenated histogram, with the specified bins and levels_grid.
     """
+
     def custom_hsv_hier_block_hist_concat(img_bgr: np.ndarray) -> np.ndarray:
         return hsv_hierarchical_block_histogram_concat(img_bgr, bins, levels_grid)
 
@@ -356,7 +358,10 @@ def compute_descriptors(
     else:
         descriptors = {}
         # for each image, compute the descriptor and store it in the dictionary
-        for imgname, image in images.items(): # tqdm.tqdm(images.items(), desc="Computing descriptors"):
+        for (
+            imgname,
+            image,
+        ) in images.items():  # tqdm.tqdm(images.items(), desc="Computing descriptors"):
             descriptor = method(image)
             descriptor_index = int(imgname.split("_")[-1])
             descriptors[descriptor_index] = descriptor
