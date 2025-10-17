@@ -1,12 +1,12 @@
 from collections.abc import Callable
 
 import numpy as np
-
-# import tqdm
 from pathlib import Path
 import pickle
 
 import cv2
+from skimage.feature import local_binary_pattern
+from scipy.fftpack import dctn
 
 
 def grayscale_histogram(image: np.ndarray, bins: int = 256) -> np.ndarray:
@@ -323,6 +323,140 @@ def equalization(img: np.ndarray) -> np.ndarray:
     img_new = np.reshape(img_new, img.shape)
 
     return img_new
+
+
+def lbp_descriptor_histogram(
+    image: np.ndarray, lbp_p: int = 8, lbp_r: int = 1, bins: int = 256
+) -> np.ndarray:
+    """
+    Function that computes the LBP histogram of an image. First converts the image to grayscale, then computes the LBP and finally the histogram.
+
+    Args:
+        image (np.ndarray): Input image in BGR format.
+
+    Returns:
+        np.ndarray: 1D numpy array representing the LBP histogram with 256 bins.
+    """
+
+    assert image.shape[2] == 3, "Input image must have 3 channels (BGR format)."
+
+    # Convert to grayscale
+    gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
+    # Compute LBP
+    lbp = local_binary_pattern(gray, P=lbp_p, R=lbp_r, method="uniform")
+    # Compute histogram
+    lbp_hist, _ = np.histogram(lbp, bins=bins, density=True)
+    return lbp_hist
+
+
+def lbp_descriptor_histogram_func(
+    lbp_p: int = 8, lbp_r: int = 1, bins: int = 256
+) -> Callable[[np.ndarray], np.ndarray]:
+    """
+    Wrapper function that returns the function lbp_descriptor_histogram but with the desired lbp_p, lbp_r and bins parameters set.
+
+    Args:
+        lbp_p (int): Number of circularly symmetric neighbour set points (quantization of the angular space).
+        lbp_r (int): Radius of circle (spatial resolution of the operator).
+        bins (int): Number of bins for the histogram.
+
+    Returns:
+        Callable[[np.ndarray], np.ndarray]: A callable function that takes an image and returns the LBP histogram, with the specified parameters.
+    """
+
+    def custom_lbp_descriptor_histogram(img_bgr: np.ndarray) -> np.ndarray:
+        return lbp_descriptor_histogram(img_bgr, lbp_p, lbp_r, bins)
+
+    return custom_lbp_descriptor_histogram
+
+
+def dct_descriptor(
+    image: np.ndarray, block_size: int = 8, n_coefs: int = 9
+) -> np.ndarray:
+    """
+    Function that computes the DCT descriptor of an image. First converts the image to grayscale, then computes the DCT and finally returns the top-left coefficients flattened.
+
+    Args:
+        image (np.ndarray): Input image in BGR format.
+        n_coefs (int): Number of coefficients to keep.
+    Returns:
+        np.ndarray: 1D numpy array representing the DCT descriptor.
+    """
+
+    assert image.shape[2] == 3, "Input image must have 3 channels (BGR format)."
+
+    # Convert to grayscale
+    gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
+    # Compute DCT
+    dct = dctn(gray, shape=(block_size, block_size), norm="ortho")
+    zigzag_indices = [
+        (i, j)
+        for s in range(2 * block_size - 1)
+        for i in range(max(0, s - block_size + 1), min(s + 1, block_size))
+        for j in [s - i]
+    ]
+    dct_descriptor = np.array([dct[i, j] for i, j in zigzag_indices[:n_coefs]])
+    return dct_descriptor
+
+
+def dct_block_descriptor(
+    image: np.ndarray,
+    grid: tuple[int, int] = (2, 2),
+    n_coefs: int = 9,
+    relative_coefs: bool = False,
+) -> np.ndarray:
+    """
+    Computes the DCT descriptor for each block in the image. Uses the function dct_descriptor.
+
+    Args:
+        image (np.ndarray): Input image in BGR format.
+        grid (tuple[int, int], optional): Number of blocks in the vertical and horizontal directions. Defaults to (2, 2).
+
+    Returns:
+        np.ndarray: 2D numpy array representing the DCT descriptors for each block.
+    """
+    assert image.shape[2] == 3, "Input image must have 3 channels (BGR format)."
+    assert len(grid) == 2, "Grid must be a tuple of two integers (rows, cols)."
+    assert n_coefs > 0, "Number of coefficients must be positive."
+
+    h, w = image.shape[:2]
+    block_h = h // grid[0]
+    block_w = w // grid[1]
+    if relative_coefs:
+        n_coefs = int(block_h * block_w * n_coefs / 100)  # percentage of total coefs
+    dct_descriptors = np.empty((grid[0] * grid[1] * n_coefs), dtype=np.float32)
+
+    for i in range(grid[0]):
+        for j in range(grid[1]):
+            block = image[
+                i * block_h : (i + 1) * block_h, j * block_w : (j + 1) * block_w
+            ]
+            dct_desc = dct_descriptor(block, block_size=block_h, n_coefs=n_coefs)
+            dct_descriptors[
+                (i * grid[1] + j) * n_coefs : (i * grid[1] + j + 1) * n_coefs
+            ] = dct_desc
+
+    return np.array(dct_descriptors)
+
+
+def dct_block_descriptor_func(
+    grid: tuple[int, int] = (2, 2), n_coefs: int = 9, relative_coefs: bool = False
+) -> Callable[[np.ndarray], np.ndarray]:
+    """
+    Wrapper function that returns the function dct_block_descriptor but with the desired grid and n_coefs parameters set.
+
+    Args:
+        grid (tuple[int, int], optional): Number of blocks in the vertical and horizontal directions. Defaults to (2, 2).
+        n_coefs (int, optional): Number of coefficients to keep. Defaults to 9.
+
+    Returns:
+        Callable[[np.ndarray], np.ndarray]: A callable function that takes an image and returns the DCT block descriptor, with the specified parameters.
+    """
+
+    def custom_dct_block_descriptor(img_bgr: np.ndarray) -> np.ndarray:
+        return dct_block_descriptor(img_bgr, grid, n_coefs, relative_coefs)
+
+    return custom_dct_block_descriptor
 
 
 def compute_descriptors(

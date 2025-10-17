@@ -4,8 +4,9 @@ import cv2
 from descriptors import (
     compute_descriptors,
     hsv_histogram_concat,
-    hsv_hier_block_hist_concat_func,
     hsv_block_hist_concat_func,
+    lbp_descriptor_histogram_func,
+    dct_block_descriptor_func,
 )
 from similarity import (
     compute_euclidean_distance,
@@ -14,7 +15,7 @@ from similarity import (
     compute_histogram_intersection,
     compute_hellinger_distance,
 )
-from segmentation import compute_binary_mask_1, compute_binary_mask_2
+from segmentation import compute_binary_mask_2
 from retrieval import retrieval
 from preprocess import preprocess_images
 from metrics import mean_average_precision_K, binary_mask_evaluation
@@ -153,8 +154,8 @@ def compute_retrieval_template(
 
 
 def main():
-    # test_week1_week2()
-    best_of_each_week()
+    test_weekn_weekm()
+    # best_of_each_week()
 
 
 def best_of_each_week():
@@ -298,20 +299,20 @@ def best_of_each_week():
 # 2) preprocess all images
 # 3) compute week 1 method as reference point
 # 4) compute week 2 methods with different parameters (nested loops, takes a long time to compute)
-def test_week1_week2():
+def test_weekn_weekm(weekn: int = 2, weekm: int = 3):
+    print(f"Testing week {weekn} vs week {weekm} methods...")
     run_block_histogram_concat = True
-    run_hier_block_histogram_concat = False
     force_retrieval = True  # If True, forces recomputation of descriptors and retrieval even if result pkl files exist
     save_results = False  # If True, saves results of retrieval in method_bins_grids.pkl
     test_mode = False  # If True, only process a few images for quick testing & visualization purposes
     testing_bins = [[4, 4, 2]]
     testing_grids = [(9, 9)]
-    testing_level_grids = [
-        [(1, 1), (2, 2)],
-        [(2, 2), (4, 4)],
-        [(4, 4), (8, 8)],
-        [(3, 3), (9, 9)],
-    ]
+    week3_bins = [4, 8, 16, 32, 64, 128, 256]
+    week3_grids = [(3, 3), (7, 7), (11, 11)]
+    n_coefs_list = [25, 50, 75, 100]  # Number of DCT coefficients to use
+    relative_coefs = True  # If True, n_coefs is interpreted as percentage of total coefficients in block
+    lbp_points = [8, 16, 24]  # Number of LBP points to use
+    lbp_radius = [1, 2, 3]  # Radius for LBP
 
     # Create results directory if it doesn't exist
     if save_results:
@@ -328,12 +329,6 @@ def test_week1_week2():
         qsd2_masks_pathlist = list(
             Path(Path(__file__).parent / "datasets" / "qsd2_w2").glob("*.png")
         )[:5]
-        qst1_pathlist = list(
-            Path(Path(__file__).parent / "datasets" / "qst1_w2").glob("*.jpg")
-        )[:5]
-        qst2_pathlist = list(
-            Path(Path(__file__).parent / "datasets" / "qst2_w2").glob("*.jpg")
-        )[:5]
     else:
         qsd1_pathlist = list(
             Path(Path(__file__).parent / "datasets" / "qsd1_w1").glob("*.jpg")
@@ -343,12 +338,6 @@ def test_week1_week2():
         )
         qsd2_masks_pathlist = list(
             Path(Path(__file__).parent / "datasets" / "qsd2_w2").glob("*.png")
-        )
-        qst1_pathlist = list(
-            Path(Path(__file__).parent / "datasets" / "qst1_w2").glob("*.jpg")
-        )
-        qst2_pathlist = list(
-            Path(Path(__file__).parent / "datasets" / "qst2_w2").glob("*.jpg")
         )
     bbdd_pathlist = list(
         Path(Path(__file__).parent / "datasets" / "BBDD").glob("*.jpg")
@@ -372,37 +361,6 @@ def test_week1_week2():
         img_path.stem: cv2.imread(str(img_path), cv2.IMREAD_GRAYSCALE)
         for img_path in qsd2_masks_pathlist
     }
-
-    precision, recall, F1 = 0, 0, 0
-    for name, img in qsd2_images.items():
-        mask = compute_binary_mask_2(img)
-        mask_gt = qsd2_gt_masks[name]
-
-        # plt.imshow(img)
-        # plt.show()
-        # plt.imshow(mask, cmap="grey")
-        # plt.show()
-
-        mask_bool = mask > 0
-        # masked_rgb = img * mask_bool[:, :, np.newaxis]
-        cropped_img = img[np.ix_(mask_bool.any(1), mask_bool.any(0))]
-        qsd2_images[name] = cropped_img
-
-        # plt.imshow(masked_rgb)
-        # plt.show()
-
-        metrics = binary_mask_evaluation(mask, mask_gt)
-
-        precision += metrics["precision"]
-        recall += metrics["recall"]
-        F1 += metrics["F1"]
-
-    avg_precision = precision / len(qsd2_images)
-    avg_recall = recall / len(qsd2_images)
-    avg_F1 = F1 / len(qsd2_images)
-    print(
-        f"WEEK 2: Binary Mask metrics: Precision: {avg_precision}. Recall: {avg_recall}. F1-measure: {avg_F1}."
-    )
 
     # 2) Preprocess all images with the same preprocessing method (resize 256x256, color balance, contrast&brightness adjustment, smoothing)
     lists_to_preprocess = [bbdd_images, qsd1_images, qsd2_images]
@@ -459,39 +417,72 @@ def test_week1_week2():
                     pickle.dump(map_results, open(result_pkl_filename, "wb"))
                 # END method hsv_block_hist_concat
 
-            if run_hier_block_histogram_concat and grid_idx < len(testing_level_grids):
-                # START method hsv_hier_block_hist_concat
+    # WEEK 3 methods: LBP & DCT
+    for points in lbp_points:
+        for radius in lbp_radius:
+            for bins in week3_bins:
+                # START method LBP
                 result_pkl_filename = (
                     Path("./df_results")
                     / "qsd2_w2"
-                    / "qsd2_w2"
-                    / "hsv_hier_block_hist_concat_bins_{bins[0]}-{bins[1]}-{bins[2]}_levels_grid_{testing_level_grids[grid_idx]}.pkl"
+                    / f"qsd2_w2_lbp_points_{points}_radius_{radius}.pkl"
                 )
                 if result_pkl_filename.exists() and not force_retrieval:
                     map_results = pickle.load(open(result_pkl_filename, "rb"))
-                    print(
-                        f"WEEK 2: hsv_hier_block_hist_concat bins={bins} levels_grid={testing_level_grids[grid_idx]}"
-                    )
+                    print(f"WEEK 3: LBP points={points} radius={radius}")
                     print(pd.DataFrame(map_results))
                     continue
-                my_hsv_hier_block_hist_concat = hsv_hier_block_hist_concat_func(
-                    bins=bins, levels_grid=testing_level_grids[grid_idx]
+                my_lbp_descriptor = lbp_descriptor_histogram_func(
+                    lbp_p=points, lbp_r=radius, bins=bins
                 )
                 map_results = compute_retrieval_template(
                     bbdd_images,
                     qsd2_images,
-                    my_hsv_hier_block_hist_concat,
+                    my_lbp_descriptor,
                     gt_qsd2_w2,
                     "qsd2_w2",
+                    visualize_output=True,
                 )
-                print(
-                    f"WEEK 2: hsv_hier_block_hist_concat bins={bins} levels_grid={testing_level_grids[grid_idx]}"
-                )
+                print(f"WEEK 3: LBP points={points} radius={radius}")
                 print(pd.DataFrame(map_results))
                 print()
                 if save_results:
                     pickle.dump(map_results, open(result_pkl_filename, "wb"))
-                # END method hsv_hier_block_hist_concat
+                # END method LBP
+    for n_coefs in n_coefs_list:
+        for grid in week3_grids:
+            # START method DCT
+            result_pkl_filename = (
+                Path("./df_results")
+                / "qsd2_w2"
+                / f"qsd2_w2_dct_ncoefs_{n_coefs}_grid_{grid[0]}-{grid[1]}.pkl"
+            )
+            if result_pkl_filename.exists() and not force_retrieval:
+                map_results = pickle.load(open(result_pkl_filename, "rb"))
+                print(
+                    f"WEEK 3: DCT n_coefs={n_coefs} grid={grid} relative_coefs={relative_coefs}"
+                )
+                print(pd.DataFrame(map_results))
+                continue
+            my_dct_block_descriptor = dct_block_descriptor_func(
+                n_coefs=n_coefs, grid=grid, relative_coefs=relative_coefs
+            )
+            map_results = compute_retrieval_template(
+                bbdd_images,
+                qsd2_images,
+                my_dct_block_descriptor,
+                gt_qsd2_w2,
+                "qsd2_w2",
+                visualize_output=True,
+            )
+            print(
+                f"WEEK 3: DCT n_coefs={n_coefs} grid={grid} relative_coefs={relative_coefs}"
+            )
+            print(pd.DataFrame(map_results))
+            print()
+            if save_results:
+                pickle.dump(map_results, open(result_pkl_filename, "wb"))
+            # END method DCT
 
 
 if __name__ == "__main__":
