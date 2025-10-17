@@ -14,3 +14,7 @@ wheels/
 
 # datasets
 /datasets
+/denoise_out
+/denoise_plots
+
+*.pkl

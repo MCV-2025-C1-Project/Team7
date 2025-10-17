@@ -170,6 +170,9 @@ def best_of_each_week():
     qsd2_masks_pathlist = list(
         Path(Path(__file__).parent / "datasets" / "qsd2_w2").glob("*.png")
     )
+    qsd1_3_pathlist = list(
+        Path(Path(__file__).parent / "datasets" / "qsd1_w3").glob("*.jpg")
+    )
     qst1_pathlist = list(
         Path(Path(__file__).parent / "datasets" / "qst1_w2").glob("*.jpg")
     )
@@ -181,7 +184,8 @@ def best_of_each_week():
     )
     gt_qsd1_w1 = pickle.load(open("./datasets/qsd1_w1/gt_corresps.pkl", "rb"))
     gt_qsd2_w2 = pickle.load(open("./datasets/qsd2_w2/gt_corresps.pkl", "rb"))
-
+    gt_qsd1_w3 = pickle.load(open("./datasets/qsd1_w3/gt_corresps.pkl", "rb"))
+    
     # 1.1) Load all images into a dictionary, key is the filename without extension and value is the image in bgr
     bbdd_images = {
         img_path.stem: cv2.imread(str(img_path)) for img_path in bbdd_pathlist
@@ -201,6 +205,9 @@ def best_of_each_week():
     qsd2_gt_masks = {
         img_path.stem: cv2.imread(str(img_path), cv2.IMREAD_GRAYSCALE)
         for img_path in qsd2_masks_pathlist
+    }
+    qsd1_3_images = {
+        img_path.stem: cv2.imread(str(img_path)) for img_path in qsd1_3_pathlist
     }
 
     # WEEK 2 best segmentation method evaluation on qsd2_w2
@@ -244,6 +251,7 @@ def best_of_each_week():
         qsd2_images,
         qst1_images,
         qst2_images,
+        qsd1_3_images
     ]
     for i in range(len(lists_to_preprocess)):
         lists_to_preprocess[i] = preprocess_images(lists_to_preprocess[i])
@@ -329,6 +337,9 @@ def test_weekn_weekm(weekn: int = 2, weekm: int = 3):
         qsd2_masks_pathlist = list(
             Path(Path(__file__).parent / "datasets" / "qsd2_w2").glob("*.png")
         )[:5]
+        qsd1_3_pathlist = list(
+            Path(Path(__file__).parent / "datasets" / "qsd1_w3").glob("*.jpg")
+        )[:5]
     else:
         qsd1_pathlist = list(
             Path(Path(__file__).parent / "datasets" / "qsd1_w1").glob("*.jpg")
@@ -339,6 +350,10 @@ def test_weekn_weekm(weekn: int = 2, weekm: int = 3):
         qsd2_masks_pathlist = list(
             Path(Path(__file__).parent / "datasets" / "qsd2_w2").glob("*.png")
         )
+        qsd1_3_pathlist = list(
+            Path(Path(__file__).parent / "datasets" / "qsd1_w3").glob("*.jpg")
+        )
+        
     bbdd_pathlist = list(
         Path(Path(__file__).parent / "datasets" / "BBDD").glob("*.jpg")
     )
@@ -346,7 +361,8 @@ def test_weekn_weekm(weekn: int = 2, weekm: int = 3):
     # Load ground truth correspondences
     gt_qsd1_w1 = pickle.load(open("./datasets/qsd1_w1/gt_corresps.pkl", "rb"))
     gt_qsd2_w2 = pickle.load(open("./datasets/qsd2_w2/gt_corresps.pkl", "rb"))
-
+    gt_qsd1_w3 = pickle.load(open("./datasets/qsd1_w3/gt_corresps.pkl", "rb"))
+    
     # 1.1) Load all images into a dictionary, key is the filename without extension and value is the image in bgr
     bbdd_images = {
         img_path.stem: cv2.imread(str(img_path)) for img_path in bbdd_pathlist
@@ -361,9 +377,12 @@ def test_weekn_weekm(weekn: int = 2, weekm: int = 3):
         img_path.stem: cv2.imread(str(img_path), cv2.IMREAD_GRAYSCALE)
         for img_path in qsd2_masks_pathlist
     }
+    qsd1_3_images = {
+        img_path.stem: cv2.imread(str(img_path)) for img_path in qsd1_3_pathlist
+    }
 
     # 2) Preprocess all images with the same preprocessing method (resize 256x256, color balance, contrast&brightness adjustment, smoothing)
-    lists_to_preprocess = [bbdd_images, qsd1_images, qsd2_images]
+    lists_to_preprocess = [bbdd_images, qsd1_images, qsd2_images, qsd1_3_images]
     for i in range(len(lists_to_preprocess)):
         lists_to_preprocess[i] = preprocess_images(lists_to_preprocess[i])
 
@@ -483,7 +502,6 @@ def test_weekn_weekm(weekn: int = 2, weekm: int = 3):
             if save_results:
                 pickle.dump(map_results, open(result_pkl_filename, "wb"))
             # END method DCT
-
 
 if __name__ == "__main__":
     main()
