@@ -250,5 +250,72 @@ def get_center_and_hollow_mask(mask, padding=10):
     bbox = (x_min, y_min, x_max, y_max)
     return center, bbox, mask_hollow
 
+def connected_components(mask, min_area=500, connectivity=8):
+    """
+    Detecta componentes conectados en una máscara binaria (0/255) usando NumPy puro.
+    Sin bucles anidados sobre todos los píxeles, solo sobre los blancos.
+    
+    Args:
+        mask (np.ndarray): máscara binaria
+        min_area (int): área mínima del componente
+        connectivity (int): 4 u 8 (conectividad)
+    
+    Returns:
+        List[dict]: cada elemento contiene:
+            - 'bbox': (x_min, y_min, x_max, y_max)
+            - 'center': (cx, cy)
+            - 'area': número de píxeles
+    """
+    # Convertimos a binario 0/1
+    mask = (mask > 0).astype(np.uint8)
+    H, W = mask.shape
 
+    # Obtenemos coordenadas de píxeles blancos
+    points = np.argwhere(mask)
+    if len(points) == 0:
+        return []
+
+    # Creamos un set para lookup rápido
+    points_set = set(map(tuple, points))
+    components = []
+
+    # Definimos vecinos
+    if connectivity == 8:
+        neighbors = [(-1,-1), (-1,0), (-1,1), (0,-1), (0,1), (1,-1), (1,0), (1,1)]
+    else:
+        neighbors = [(-1,0), (0,-1), (0,1), (1,0)]
+
+    while points_set:
+        # Tomamos un punto y hacemos BFS
+        seed = points_set.pop()
+        stack = [seed]
+        comp_pixels = []
+
+        while stack:
+            y, x = stack.pop()
+            comp_pixels.append((y, x))
+            for dy, dx in neighbors:
+                ny, nx = y + dy, x + dx
+                if (ny, nx) in points_set:
+                    points_set.remove((ny, nx))
+                    stack.append((ny, nx))
+
+        comp_pixels = np.array(comp_pixels)
+        area = len(comp_pixels)
+        if area < min_area:
+            continue
+
+        ys, xs = comp_pixels[:,0], comp_pixels[:,1]
+        x_min, x_max = xs.min(), xs.max()
+        y_min, y_max = ys.min(), ys.max()
+        cx = int(xs.mean())
+        cy = int(ys.mean())
+
+        components.append({
+            "bbox": (x_min, y_min, x_max, y_max),
+            "center": (cx, cy),
+            "area": area
+        })
+
+    return components
 # ADVO FIN : Laplacian Filter
