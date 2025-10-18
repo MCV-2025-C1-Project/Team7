@@ -89,10 +89,10 @@ for p in sorted(Q_DIR.glob("*")):
     rows.append(r)
     imgs.append((p, img, gray))
 
-if not rows:
-    print("[WARN] No s'han trobat imatges.")
-else:
-    print(f"[INFO] Imatges trobades: {len(rows)}")
+#if not rows:
+#    print("[WARN] No s'han trobat imatges.")
+#else:
+#    print(f"[INFO] Imatges trobades: {len(rows)}")
 
 
 # ---------- 2) Llindars adaptatius per percentils (+mínims absoluts) ----------
@@ -119,12 +119,12 @@ TH_RES = max(p90_res, ABS_RES_MIN)
 TH_SIG = max(p90_sig, ABS_SIG_MIN)
 TH_HP = max(p90_hp, ABS_HP_MIN)
 
-print(
-    f"[INFO] Percentils p90 -> sp:{p90_sp:.4f}, res:{p90_res:.4f}, sig:{p90_sig:.2f}, hp:{p90_hp:.2f}"
-)
-print(
-    f"[INFO] Llindars finals -> SP:{TH_SP:.4f} RES:{TH_RES:.4f} SIG:{TH_SIG:.2f} HP:{TH_HP:.2f}"
-)
+#print(
+#    f"[INFO] Percentils p90 -> sp:{p90_sp:.4f}, res:{p90_res:.4f}, sig:{p90_sig:.2f}, hp:{p90_hp:.2f}"
+#)
+#print(
+#    f"[INFO] Llindars finals -> SP:{TH_SP:.4f} RES:{TH_RES:.4f} SIG:{TH_SIG:.2f} HP:{TH_HP:.2f}"
+#)
 
 # Desa CSV de mètriques
 with open(PLOTS / "noise_scores.csv", "w", newline="") as f:
@@ -133,7 +133,7 @@ with open(PLOTS / "noise_scores.csv", "w", newline="") as f:
     )
     w.writeheader()
     w.writerows(rows)
-print(f"[INFO] CSV -> {PLOTS / 'noise_scores.csv'}")
+#print(f"[INFO] CSV -> {PLOTS / 'noise_scores.csv'}")
 
 
 # ---------- 3) Funció de decisió + denoise escalonat ----------
@@ -251,8 +251,87 @@ for i, (p, img, gray) in enumerate(imgs):
             dpi=DPI,
         )
         plt.close(fig)
+
+def denoise_image(img: np.ndarray) -> np.ndarray:
+    # STEP 1: Escora totes les imatges i calcula mètriques
+    gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+    r = {
+        "sp": sp_ratio(gray),
+        "res": impulse_residue(gray),
+        "sig": sigma_on_weak_texture(gray),
+        "hp": hp_energy(gray),
+        "sharp": lap_var(gray)
+    }
+    #rows.append(r)
+    #imgs.append((p, img, gray))
+    
+    # STEP 2: Llindars adaptatius per percentils (+mínims absoluts)
+    """
+    sp_arr = np.array(r["sp"])
+    res_arr = np.array(r["res"])
+    sig_arr = np.array(r["sig"])
+    hp_arr = np.array(r["hp"])
+
+    p90_sp, p90_res, p90_sig, p90_hp = (
+        pctl(sp_arr, 90),
+        pctl(res_arr, 90),
+        pctl(sig_arr, 90),
+        pctl(hp_arr, 90),
+    )
+
+
+    ABS_SP_MIN, ABS_RES_MIN, ABS_SIG_MIN, ABS_HP_MIN = 0.002, 0.010, 3.0, 1.5
+    TH_SP = max(p90_sp, ABS_SP_MIN)
+    TH_RES = max(p90_res, ABS_RES_MIN)
+    TH_SIG = max(p90_sig, ABS_SIG_MIN)
+    TH_HP = max(p90_hp, ABS_HP_MIN)
+
+    # STEP 4: Força TOP-N per assegurar exemples als plots
+    force_idx = set(
+        top_ids(sp_arr, TOP_N_FORCE)
+        + top_ids(res_arr, TOP_N_FORCE)
+        + top_ids(sig_arr, TOP_N_FORCE)
+        + top_ids(hp_arr, TOP_N_FORCE)
+    )
+    """
+    # ---------- 5) Procés principal + plots ----------
+    metrics = {
+        "sp": r["sp"],
+        "res": r["res"],
+        "sig": r["sig"],
+        "hp": r["hp"],
+    }
+    out, choice, sharp0, sharp1 = decide_and_denoise(img, metrics)
+    did_filter = (choice != "skip") and ("reverted" not in choice)
+    
+    """
+    # Desa la imatge denoised si s'ha aplicat filtrat
+    if did_filter:
+        cv2.imwrite(str(OUTIMG / f"{p.stem}__{choice.replace(' ', '_')}.jpg"), out)
+
+    # Plota si s'ha filtrat O si és un dels forçats
+    if did_filter or (i in force_idx):
+        fig, ax = plt.subplots(1, 2, figsize=(10, 5))
+        ax[0].imshow(cv2.cvtColor(img, cv2.COLOR_BGR2RGB))
+        ax[0].axis("off")
+        ax[0].set_title(
+            f"{p.name}\nsp={metrics['sp']:.4f} res={metrics['res']:.4f}\nσweak={metrics['sig']:.2f} hp={metrics['hp']:.2f}"
+        )
+        ax[1].imshow(cv2.cvtColor(out, cv2.COLOR_BGR2RGB))
+        ax[1].axis("off")
+        ax[1].set_title(f"Denoised: {choice}\nsharp {sharp0:.1f}→{sharp1:.1f}")
+        plt.tight_layout()
+        plt.savefig(
+            PLOTS
+            / f"{p.stem}__{('FORCED_' if not did_filter else '')}{choice.replace(' ', '_')}.png",
+            dpi=DPI,
+        )
+        plt.close(fig)
         print(f"[PLOT] {p.name} -> {choice} (forced={i in force_idx})")
     else:
         print(f"[SKIP] {p.name} -> skip")
 
-print("✅ Fet! Plots a:", PLOTS, " | Denoised a:", OUTIMG)
+    print("✅ Fet! Plots a:", PLOTS, " | Denoised a:", OUTIMG)
+    
+    """
+    return out

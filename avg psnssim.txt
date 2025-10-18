@@ -1,0 +1,3 @@
+0 filtering : avgpsnr = 55.7; avgssim = 0.86
+preprocessing: avgpsnr = 29.43; avgssim = 0.73
+denoise: avgpsnr = 51.33; avgssim = 0.86

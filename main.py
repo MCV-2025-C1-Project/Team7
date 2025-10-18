@@ -20,6 +20,7 @@ from segmentation import compute_binary_mask_2
 from retrieval import retrieval
 from preprocess import preprocess_images
 from metrics import mean_average_precision_K, binary_mask_evaluation, PSNR, SSIM
+from denoise import denoise_image
 import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
@@ -372,20 +373,32 @@ def test_weekn_weekm(weekn: int = 2, weekm: int = 3):
         img_path.stem: cv2.imread(str(img_path))
         for img_path in qsd1_3_original_pathlist
     }
-
-    # WEEK 3 TASK 1: NOISE FILTER EVALUATION
+    
+    # WEEK 3 TASK 1: NOISE FILTER EVALUATION                      
+    vPSNR = []
+    avgPSNR = 0
+    vSSIM = []
+    avgSSIM = 0
     for name, img in qsd1_3_images.items():
         original_image = qsd1_3_original_images[name]
         noisy_image = img
-
+        noisy_image_filtered = denoise_image(noisy_image)
+        
         original_rgb = cv2.cvtColor(original_image, cv2.COLOR_BGR2RGB)
-        noisy_rgb = cv2.cvtColor(noisy_image, cv2.COLOR_BGR2RGB)
-
+        noisy_rgb = cv2.cvtColor(noisy_image_filtered, cv2.COLOR_BGR2RGB)
+        
         psnr = PSNR(original_rgb, noisy_rgb)
         ssim = SSIM(original_rgb, noisy_rgb)
-
-        print(f"psnr: {psnr}")
-        print(f"ssim: {ssim}")
+        
+        avgPSNR += psnr
+        avgSSIM += ssim
+        vPSNR.append(psnr)
+        vSSIM.append(ssim)
+    avgPSNR /= len(qsd1_3_images)
+    avgSSIM /= len(qsd1_3_images)
+    print(f"Avergae PSNR: {avgPSNR}")
+    print(f"Average SSIM: {avgSSIM}")   
+        
 
     # 2) Preprocess all images with the same preprocessing method (resize 256x256, color balance, contrast&brightness adjustment, smoothing)
     lists_to_preprocess = [bbdd_images, qsd1_3_images, qsd1_3_original_images]
