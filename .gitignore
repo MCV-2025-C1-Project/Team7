@@ -1,3 +1,4 @@
+.gitignore
 # Python-generated files
 __pycache__
 *.py[oc]
@@ -5,16 +6,28 @@ build/
 dist/
 wheels/
 *.egg-info
+.ruff_cache
 
 # Virtual environments
 .venv
 
 # mac
 .Ds-Store
+.DS_Store
 
 # datasets
 /datasets
 /denoise_out
 /denoise_plots
-
 *.pkl
+
+BBDD/
+qsd*
+/qst1_w1
+/descriptor/qst1_w1
+/datasets/qst1_w1
+qst*
+bbdd*
+df_results/
+plots*
+output_masks*
