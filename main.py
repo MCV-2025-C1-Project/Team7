@@ -18,7 +18,7 @@ from similarity import (
 from segmentation import compute_binary_mask_2
 from retrieval import retrieval
 from preprocess import preprocess_images
-from metrics import mean_average_precision_K, binary_mask_evaluation
+from metrics import mean_average_precision_K, binary_mask_evaluation, PSNR, SSIM
 import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
@@ -353,6 +353,9 @@ def test_weekn_weekm(weekn: int = 2, weekm: int = 3):
         qsd1_3_pathlist = list(
             Path(Path(__file__).parent / "datasets" / "qsd1_w3").glob("*.jpg")
         )
+        qsd1_3_original_pathlist = list(
+            Path(Path(__file__).parent / "datasets" / "qsd1_w3" / "non_augmented").glob("*.jpg")
+        )
         
     bbdd_pathlist = list(
         Path(Path(__file__).parent / "datasets" / "BBDD").glob("*.jpg")
@@ -380,6 +383,23 @@ def test_weekn_weekm(weekn: int = 2, weekm: int = 3):
     qsd1_3_images = {
         img_path.stem: cv2.imread(str(img_path)) for img_path in qsd1_3_pathlist
     }
+    qsd1_3_original_images = {
+        img_path.stem: cv2.imread(str(img_path)) for img_path in qsd1_3_original_pathlist
+    }
+    
+    # WEEK 3 TASK 1: NOISE FILTER EVALUATION
+    for name, img in qsd1_3_images.items():
+        original_image = qsd1_3_original_images[name]
+        noisy_image = img
+        
+        original_rgb = cv2.cvtColor(original_image, cv2.COLOR_BGR2RGB)
+        noisy_rgb = cv2.cvtColor(noisy_image, cv2.COLOR_BGR2RGB)
+        
+        psnr = PSNR(original_rgb, noisy_rgb)
+        ssim = SSIM(original_rgb, noisy_rgb)
+        
+        print(f"psnr: {psnr}")
+        print(f"ssim: {ssim}")
 
     # 2) Preprocess all images with the same preprocessing method (resize 256x256, color balance, contrast&brightness adjustment, smoothing)
     lists_to_preprocess = [bbdd_images, qsd1_images, qsd2_images, qsd1_3_images]
