@@ -250,16 +250,17 @@ def get_center_and_hollow_mask(mask, padding=10):
     bbox = (x_min, y_min, x_max, y_max)
     return center, bbox, mask_hollow
 
+
 def connected_components(mask, min_area=500, connectivity=8):
     """
     Detecta componentes conectados en una máscara binaria (0/255) usando NumPy puro.
     Sin bucles anidados sobre todos los píxeles, solo sobre los blancos.
-    
+
     Args:
         mask (np.ndarray): máscara binaria
         min_area (int): área mínima del componente
         connectivity (int): 4 u 8 (conectividad)
-    
+
     Returns:
         List[dict]: cada elemento contiene:
             - 'bbox': (x_min, y_min, x_max, y_max)
@@ -281,9 +282,18 @@ def connected_components(mask, min_area=500, connectivity=8):
 
     # Definimos vecinos
     if connectivity == 8:
-        neighbors = [(-1,-1), (-1,0), (-1,1), (0,-1), (0,1), (1,-1), (1,0), (1,1)]
+        neighbors = [
+            (-1, -1),
+            (-1, 0),
+            (-1, 1),
+            (0, -1),
+            (0, 1),
+            (1, -1),
+            (1, 0),
+            (1, 1),
+        ]
     else:
-        neighbors = [(-1,0), (0,-1), (0,1), (1,0)]
+        neighbors = [(-1, 0), (0, -1), (0, 1), (1, 0)]
 
     while points_set:
         # Tomamos un punto y hacemos BFS
@@ -305,17 +315,17 @@ def connected_components(mask, min_area=500, connectivity=8):
         if area < min_area:
             continue
 
-        ys, xs = comp_pixels[:,0], comp_pixels[:,1]
+        ys, xs = comp_pixels[:, 0], comp_pixels[:, 1]
         x_min, x_max = xs.min(), xs.max()
         y_min, y_max = ys.min(), ys.max()
         cx = int(xs.mean())
         cy = int(ys.mean())
 
-        components.append({
-            "bbox": (x_min, y_min, x_max, y_max),
-            "center": (cx, cy),
-            "area": area
-        })
+        components.append(
+            {"bbox": (x_min, y_min, x_max, y_max), "center": (cx, cy), "area": area}
+        )
 
     return components
+
+
 # ADVO FIN : Laplacian Filter

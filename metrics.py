@@ -1,7 +1,7 @@
 import numpy as np
 from math import log10, sqrt
 from skimage.metrics import structural_similarity as ssim
-import cv2
+
 
 def mean_average_precision_K(
     results: dict[int, list[tuple[float, int]]], gt: list[list[int]], K: int = 1
@@ -78,15 +78,16 @@ def PSNR(original, noisy):
         The PSNR value.
     """
     mse = np.mean((original - noisy) ** 2)
-    if(mse == 0):  # MSE is zero means no noise is present in the signal .
-                  # Therefore PSNR have no importance.
+    if mse == 0:  # MSE is zero means no noise is present in the signal .
+        # Therefore PSNR have no importance.
         return 100
     max_pixel = 255.0
     psnr = 20 * log10(max_pixel / sqrt(mse))
 
     return psnr
 
-def SSIM(original, noisy) :
+
+def SSIM(original, noisy):
     """
     Computes the structural similarity index
     Args:
@@ -102,20 +103,3 @@ def SSIM(original, noisy) :
     ssim_score, dif = ssim(original, noisy, full=True, channel_axis=2)
 
     return ssim_score
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
