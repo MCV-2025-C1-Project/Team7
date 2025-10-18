@@ -5,7 +5,7 @@ from pathlib import Path
 import pickle
 
 import cv2
-from skimage.feature import local_binary_pattern
+from skimage.feature import local_binary_pattern, graycomatrix, graycoprops
 from scipy.fftpack import dctn
 
 
@@ -457,6 +457,147 @@ def dct_block_descriptor_func(
         return dct_block_descriptor(img_bgr, grid, n_coefs, relative_coefs)
 
     return custom_dct_block_descriptor
+
+
+def glcm_descriptor(
+    image: np.ndarray,
+    distances: list[int] = [1, 2],
+    angles: list[float] = [0, np.pi / 4, np.pi / 2, 3 * np.pi / 4],
+    levels: int = 256,
+    symmetric: bool = True,
+    normed: bool = True,
+) -> np.ndarray:
+    """
+    Compute GLCM matrix and extract the texture features for an image.
+
+    Args:
+        image: Input image in BGR format.
+        distances: List of pixel pair distances (e.g., [1, 2] for adjacent and 2-pixel apart).
+        angles: List of angles in radians (e.g., [0, π/4, π/2, 3π/4] for 4 directions).
+        levels: Number of gray levels (reduce from 256 to 64 or 32 for efficiency).
+        symmetric: Whether the GLCM should be symmetric.
+        normed: Whether to normalize the GLCM.
+
+    Returns:
+        A 1D numpy array containing concatenated GLCM features (contrast, dissimilarity, homogeneity, energy, correlation).
+    """
+    assert image.shape[2] == 3, "Input image must have 3 channels (BGR format)."
+
+    # Convert to grayscale
+    gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
+
+    # Quantize the grayscale image to the specified number of levels
+    quantized = np.floor(gray / (256 / levels)).astype(np.uint8)
+
+    # Compute GLCM
+    glcm = graycomatrix(
+        quantized,
+        distances=distances,
+        angles=angles,
+        levels=levels,
+        symmetric=symmetric,
+        normed=normed,
+    )
+
+    # Extract texture features
+    contrast = graycoprops(glcm, "contrast").flatten()
+    dissimilarity = graycoprops(glcm, "dissimilarity").flatten()
+    homogeneity = graycoprops(glcm, "homogeneity").flatten()
+    energy = graycoprops(glcm, "energy").flatten()
+    correlation = graycoprops(glcm, "correlation").flatten()
+
+    # Concatenate all features into a single feature vector
+    features = np.concatenate(
+        [contrast, dissimilarity, homogeneity, energy, correlation]
+    )
+
+    return features
+
+
+def glcm_descriptor_func(
+    distances: list[int] = [1, 2],
+    angles: list[float] = [0, np.pi / 4, np.pi / 2, 3 * np.pi / 4],
+    levels: int = 64,
+    symmetric: bool = True,
+    normed: bool = True,
+) -> Callable[[np.ndarray], np.ndarray]:
+    """
+    Wrapper function for GLCM descriptor with preset parameters.
+
+    Args:
+        distances: List of pixel pair distances.
+        angles: List of angles in radians.
+        levels: Number of gray levels (64 or 32 recommended for efficiency).
+        symmetric: Whether the GLCM should be symmetric.
+        normed: Whether to normalize the GLCM.
+
+    Returns:
+        A callable function that takes an image and returns GLCM features (contrast, dissimilarity, homogeneity, energy, correlation).
+    """
+
+    def custom_glcm_descriptor(img_bgr: np.ndarray) -> np.ndarray:
+        return glcm_descriptor(img_bgr, distances, angles, levels, symmetric, normed)
+
+    return custom_glcm_descriptor
+
+
+def glcm_block_descriptor(
+    image: np.ndarray,
+    grid: tuple[int, int] = (2, 2),
+    distances: list[int] = [1, 2],
+    angles: list[float] = [0, np.pi / 4, np.pi / 2, 3 * np.pi / 4],
+    levels: int = 256,
+    symmetric: bool = True,
+    normed: bool = True,
+) -> np.ndarray:
+    """
+    Block-based GLCM descriptor computation. Divides the image into blocks and computes GLCM features for each block.
+    """
+    assert image.shape[2] == 3, "Input image must have 3 channels (BGR format)."
+    assert len(grid) == 2, "Grid must be a tuple of two integers (rows, cols)."
+
+    h_block, w_block = image.shape[0] // grid[0], image.shape[1] // grid[1]
+
+    feature_size = (
+        5 * len(distances) * len(angles)
+    )  # 5 properties/features per distance-angle pair
+    features = np.empty(grid[0] * grid[1] * feature_size, dtype=np.float32)
+
+    block_idx = 0
+    for i in range(grid[0]):
+        for j in range(grid[1]):
+            block = image[
+                i * h_block : (i + 1) * h_block, j * w_block : (j + 1) * w_block
+            ]
+            block_features = glcm_descriptor(
+                block, distances, angles, levels, symmetric, normed
+            )
+            features[
+                block_idx * feature_size : block_idx * feature_size + feature_size
+            ] = block_features
+            block_idx += 1
+
+    return features
+
+
+def glcm_block_descriptor_func(
+    grid: tuple[int, int] = (2, 2),
+    distances: list[int] = [1, 2],
+    angles: list[float] = [0, np.pi / 4, np.pi / 2, 3 * np.pi / 4],
+    levels: int = 64,
+    symmetric: bool = True,
+    normed: bool = True,
+) -> Callable[[np.ndarray], np.ndarray]:
+    """
+    Wrapper function for block-based GLCM descriptor with preset parameters.
+    """
+
+    def custom_glcm_block_descriptor(img_bgr: np.ndarray) -> np.ndarray:
+        return glcm_block_descriptor(
+            img_bgr, grid, distances, angles, levels, symmetric, normed
+        )
+
+    return custom_glcm_block_descriptor
 
 
 def compute_descriptors(
