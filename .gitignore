@@ -31,3 +31,4 @@ bbdd*
 df_results/
 plots*
 output_masks*
+/outputs_detected
