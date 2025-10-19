@@ -29,7 +29,7 @@ def main():
         masks = hybrid_mask_fft_color_lab(img_bgr)
 
         # Detectar cuadros (solo máscara y min_area)
-        components = connected_components(masks["mask_rgb"], min_area=1000)
+        components = connected_components(masks["mask_lab"], min_area=1000)
         print(f"🖼️ {len(components)} cuadros detectados")
 
         # Visualización de máscaras intermedias
@@ -84,7 +84,7 @@ def main():
         print(f"Imagen guardada en {img_path_out}")
         print(f"Figura guardada en {fig_path}")
 
-        
+
         # Guardar imagen con detecciones
         output_file = Path(OUTPUT_PATH) / f"{img_path.stem}_detected.png"
         cv2.imwrite(str(output_file), cv2.cvtColor(vis, cv2.COLOR_RGB2BGR))

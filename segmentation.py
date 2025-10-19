@@ -114,7 +114,7 @@ def hybrid_mask_fft_color_lab(img_bgr):
     gray = cv2.cvtColor(img_rgb, cv2.COLOR_RGB2GRAY)
     # 1) RGB
     mask_rgb = segment_rgb_double_threshold(
-        img_rgb, low_thresh=(70, 70, 70), high_thresh=(230, 230, 230)
+        img_rgb, low_thresh=(50, 50, 50), high_thresh=(240, 240, 240)
     )
     mask_rgb = cv2.morphologyEx(mask_rgb, cv2.MORPH_OPEN, np.ones((3, 3), np.uint8))
     mask_rgb = to_u8(mask_rgb)
@@ -169,6 +169,7 @@ def compute_mask_lab_otsu(img_bgr, open_ks=3, close_ks=5):
                             cv2.getStructuringElement(cv2.MORPH_RECT, (close_ks, close_ks)))
     mask = fill_holes(mask)
     return to_u8(mask)
+"""
 def fill_holes(mask: np.ndarray) -> np.ndarray:
     # Rellena agujeros en una máscara binaria 0/255 usando flood fill
     h, w = mask.shape
@@ -178,7 +179,7 @@ def fill_holes(mask: np.ndarray) -> np.ndarray:
     flood_inv = cv2.bitwise_not(flood)
     filled = cv2.bitwise_or(mask, flood_inv)
     return filled
-
+"""
 def keep_largest_component(mask: np.ndarray) -> np.ndarray:
     cnts, _ = cv2.findContours(mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
     out = np.zeros_like(mask)
@@ -196,7 +197,7 @@ def clear_border(mask: np.ndarray) -> np.ndarray:
     cv2.floodFill(tmp, lab, (0, 0), 128) # marcar fondo conectado al borde
     mask_no_border = np.where(tmp == 128, 0, mask).astype(np.uint8)
     return mask_no_border
-
+"""
 def edges_to_region(edges: np.ndarray, thresh=40, dilate_ks=7) -> np.ndarray:
     # De bordes a región sólida
     binm = (edges > thresh).astype(np.uint8) * 255
@@ -206,7 +207,7 @@ def edges_to_region(edges: np.ndarray, thresh=40, dilate_ks=7) -> np.ndarray:
     binm = fill_holes(binm)
     binm = cv2.morphologyEx(binm, cv2.MORPH_OPEN, np.ones((3, 3), np.uint8))
     return binm
-
+"""
 def to_u8(mask):
     mask = mask.astype(np.uint8)
     if mask.max() <= 1:
