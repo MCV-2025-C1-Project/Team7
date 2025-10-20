@@ -20,7 +20,6 @@ from segmentation import compute_binary_mask_2
 from retrieval import retrieval
 from preprocess import preprocess_images
 from metrics import mean_average_precision_K, binary_mask_evaluation, PSNR, SSIM
-from denoise import denoise_image
 import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
@@ -321,19 +320,22 @@ def test_weekn_weekm(weekn: int = 2, weekm: int = 3):
     test_mode = False  # If True, only process a few images for quick testing & visualization purposes
     testing_bins = [[4, 4, 2]]
     testing_grids = [(9, 9)]
-    week3_bins = [4, 32, 128, 257]
-    week3_grids = [(3, 3), (7, 7), (11, 11)]
-    n_coefs_list = [25, 50, 75, 100]  # Number of DCT coefficients to use
-    relative_coefs = True  # If True, n_coefs is interpreted as percentage of total coefficients in block
+    week3_bins = [4, 16, 32, 64, 128, 257]
+    week3_grids = [(3, 3), (5, 5), (7, 7), (11, 11)]
+    relative_coefs = False  # If True, n_coefs is interpreted as percentage of total coefficients in block
+    if relative_coefs:
+        n_coefs_list = [25, 50, 75, 100]  # Number of DCT coefficients to use
+    else:
+        n_coefs_list = [10, 20, 30, 40, 50]  # Number of DCT coefficients to use
     lbp_points = [8, 16, 24]  # Number of LBP points to use
     lbp_radius = [1, 2, 3]  # Radius for LBP
-    glcm_grids = [(1, 1), (2, 2), (4, 4), (8, 8), (16, 16)]
+    glcm_grids = [(1, 1), (2, 2), (4, 4), (6, 6), (8, 8), (10, 10), (12, 12), (14, 14), (16, 16)]
     glcm_distances = [[1, 2], [1, 2, 3], [1, 3, 5]]
-    glcm_levels = [256, 128, 64, 32]
+    glcm_levels = [256, 128, 64, 32, 16, 8]
 
     # Create results directory if it doesn't exist
     if save_results:
-        Path("./df_results").mkdir(parents=True, exist_ok=True)
+        Path("./df_results/no_preprocess_no_resize").mkdir(parents=True, exist_ok=True)
 
     # 1) Load all images paths
     if test_mode:
@@ -373,32 +375,20 @@ def test_weekn_weekm(weekn: int = 2, weekm: int = 3):
         img_path.stem: cv2.imread(str(img_path))
         for img_path in qsd1_3_original_pathlist
     }
-    
-    # WEEK 3 TASK 1: NOISE FILTER EVALUATION                      
-    vPSNR = []
-    avgPSNR = 0
-    vSSIM = []
-    avgSSIM = 0
+
+    # WEEK 3 TASK 1: NOISE FILTER EVALUATION
     for name, img in qsd1_3_images.items():
         original_image = qsd1_3_original_images[name]
         noisy_image = img
-        noisy_image_filtered = denoise_image(noisy_image)
-        
+
         original_rgb = cv2.cvtColor(original_image, cv2.COLOR_BGR2RGB)
-        noisy_rgb = cv2.cvtColor(noisy_image_filtered, cv2.COLOR_BGR2RGB)
-        
+        noisy_rgb = cv2.cvtColor(noisy_image, cv2.COLOR_BGR2RGB)
+
         psnr = PSNR(original_rgb, noisy_rgb)
         ssim = SSIM(original_rgb, noisy_rgb)
-        
-        avgPSNR += psnr
-        avgSSIM += ssim
-        vPSNR.append(psnr)
-        vSSIM.append(ssim)
-    avgPSNR /= len(qsd1_3_images)
-    avgSSIM /= len(qsd1_3_images)
-    print(f"Avergae PSNR: {avgPSNR}")
-    print(f"Average SSIM: {avgSSIM}")   
-        
+
+        print(f"psnr: {psnr}")
+        print(f"ssim: {ssim}")
 
     # 2) Preprocess all images with the same preprocessing method (resize 256x256, color balance, contrast&brightness adjustment, smoothing)
     lists_to_preprocess = [bbdd_images, qsd1_3_images, qsd1_3_original_images]
