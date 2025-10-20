@@ -23,7 +23,7 @@ from metrics import mean_average_precision_K, binary_mask_evaluation, PSNR, SSIM
 import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
-
+import copy
 
 DISTANCE_FUNCTIONS = [
     compute_euclidean_distance,
@@ -377,19 +377,70 @@ def test_weekn_weekm(weekn: int = 2, weekm: int = 3):
     }
 
     # WEEK 3 TASK 1: NOISE FILTER EVALUATION
-    for name, img in qsd1_3_images.items():
+    filtered_images = copy.deepcopy(qsd1_3_images)
+    preprocess_images(filtered_images)
+    vPSNR = []
+    avgPSNR = 0
+    vSSIM = []
+    avgSSIM = 0
+    for name, img in filtered_images.items():
+        noisy_image = qsd1_3_images[name]
+        noisy_image = cv2.resize(noisy_image, (256, 256), interpolation=cv2.INTER_AREA)
         original_image = qsd1_3_original_images[name]
-        noisy_image = img
-
+        original_image = cv2.resize(original_image, (256, 256), interpolation=cv2.INTER_AREA)
+        img_f = original_image.astype(np.float32) + 1e-6
+        mB, mG, mR = [img_f[:, :, c].mean() for c in range(3)]
+        g = (mB + mG + mR) / 3.0
+        img_f[:, :, 0] *= g / mB
+        img_f[:, :, 1] *= g / mG
+        img_f[:, :, 2] *= g / mR
+        img_bal = np.clip(img_f, 0, 255).astype(np.uint8)
+        
         original_rgb = cv2.cvtColor(original_image, cv2.COLOR_BGR2RGB)
+        plt.imshow(original_rgb)
+        plt.show()
+        
+        img_bal_rgb = cv2.cvtColor(img_bal, cv2.COLOR_BGR2HSV)
+        plt.imshow(img_bal_rgb)
+        plt.show()
+        
         noisy_rgb = cv2.cvtColor(noisy_image, cv2.COLOR_BGR2RGB)
-
-        psnr = PSNR(original_rgb, noisy_rgb)
-        ssim = SSIM(original_rgb, noisy_rgb)
-
-        print(f"psnr: {psnr}")
-        print(f"ssim: {ssim}")
-
+        plt.imshow(noisy_rgb)
+        plt.show()
+        
+        filtered_rgb = cv2.cvtColor(img, cv2.COLOR_BGR2HSV)
+        plt.imshow(filtered_rgb)
+        plt.show()
+        
+        psnr = PSNR(img_bal_rgb, filtered_rgb)
+        ssim = SSIM(img_bal_rgb, filtered_rgb)
+        # print(f"psnr {psnr}")
+        # print(f"ssim {ssim}")
+        avgPSNR += psnr
+        avgSSIM += ssim
+        vPSNR.append(psnr)
+        vSSIM.append(ssim)
+    avgPSNR /= len(qsd1_3_images)
+    avgSSIM /= len(qsd1_3_images)
+    # print(f"Avergae PSNR: {avgPSNR}")
+    # print(f"Average SSIM: {avgSSIM}")
+    """
+    # --- PSNR Plot ---
+    plt.figure(figsize=(8, 4))
+    plt.plot(vPSNR, marker='o', linestyle='-')
+    plt.title('PSNR Values Across Images')
+    plt.xlabel('Image Index')
+    plt.ylabel('PSNR (dB)')
+    plt.show()
+    
+    # --- SSIM Plot ---
+    plt.figure(figsize=(8, 4))
+    plt.plot(vSSIM, marker='o', linestyle='-')
+    plt.title('SSIM Values Across Images')
+    plt.xlabel('Image Index')
+    plt.ylabel('SSIM value')
+    plt.show()
+    """
     # 2) Preprocess all images with the same preprocessing method (resize 256x256, color balance, contrast&brightness adjustment, smoothing)
     lists_to_preprocess = [bbdd_images, qsd1_3_images, qsd1_3_original_images]
     for i in range(len(lists_to_preprocess)):

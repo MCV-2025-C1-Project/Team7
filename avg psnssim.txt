@@ -1,3 +1,4 @@
 0 filtering : avgpsnr = 55.7; avgssim = 0.86
-preprocessing: avgpsnr = 29.43; avgssim = 0.73
+preprocessing blur: avgpsnr = 29.43; avgssim = 0.73
+preprocessing medianBlur: avgpsnr = 30.02; avgssim = 0.86
 denoise: avgpsnr = 51.33; avgssim = 0.86

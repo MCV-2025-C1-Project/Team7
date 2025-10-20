@@ -2,7 +2,7 @@ import cv2
 import numpy as np
 from filtering import laplacian_filter
 from tqdm import tqdm
-
+from denoise import denoise_image
 
 def preprocess_images(images: dict[str, np.ndarray]) -> dict[str, np.ndarray]:
     for img_name, img in images.items():
@@ -19,8 +19,9 @@ def preprocess_images(images: dict[str, np.ndarray]) -> dict[str, np.ndarray]:
         img_bal = np.clip(img_f, 0, 255).astype(np.uint8)
 
         # d) Suavitzat bilateral (treu soroll preservant vores i color)
-        img_smooth = cv2.blur(img_bal, (5, 5))
-
+        img_smooth = denoise_image(img_bal)
+        #img_smooth = cv2.medianBlur(img_bal, 3)
+        
         images[img_name] = img_smooth
     return images
 
