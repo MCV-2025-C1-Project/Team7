@@ -422,8 +422,12 @@ def dct_block_descriptor(
     h, w = image.shape[:2]
     block_h = h // grid[0]
     block_w = w // grid[1]
+    padding = 0
     if relative_coefs:
         n_coefs = int(block_h * block_w * n_coefs / 100)  # percentage of total coefs
+    elif n_coefs > block_h * block_w:
+        padding = n_coefs - (block_h * block_w)
+        n_coefs = block_h * block_w  # max number of coefs
     dct_descriptors = np.empty((grid[0] * grid[1] * n_coefs), dtype=np.float32)
 
     for i in range(grid[0]):
@@ -432,6 +436,8 @@ def dct_block_descriptor(
                 i * block_h : (i + 1) * block_h, j * block_w : (j + 1) * block_w
             ]
             dct_desc = dct_descriptor(block, block_size=block_h, n_coefs=n_coefs)
+            if padding > 0:
+                dct_desc = np.pad(dct_desc, (0, padding), "constant", constant_values=0)
             dct_descriptors[
                 (i * grid[1] + j) * n_coefs : (i * grid[1] + j + 1) * n_coefs
             ] = dct_desc
