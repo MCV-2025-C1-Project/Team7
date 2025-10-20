@@ -155,20 +155,27 @@ def compute_mask_lab_otsu(img_bgr, open_ks=3, close_ks=5):
     wall_lab = np.median(img_lab[border == 1], axis=0).astype(np.uint8)
 
     delta_ab = np.sqrt(
-        (img_lab[:, :, 1] - wall_lab[1]) ** 2 +
-        (img_lab[:, :, 2] - wall_lab[2]) ** 2
+        (img_lab[:, :, 1] - wall_lab[1]) ** 2 + (img_lab[:, :, 2] - wall_lab[2]) ** 2
     ).astype(np.float32)
 
     dist = cv2.normalize(delta_ab, None, 0, 255, cv2.NORM_MINMAX).astype(np.uint8)
     _, mask = cv2.threshold(dist, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
 
     # limpieza SUAVE: no nos quedamos con el mayor componente
-    mask = cv2.morphologyEx(mask, cv2.MORPH_OPEN,
-                            cv2.getStructuringElement(cv2.MORPH_RECT, (open_ks, open_ks)))
-    mask = cv2.morphologyEx(mask, cv2.MORPH_CLOSE,
-                            cv2.getStructuringElement(cv2.MORPH_RECT, (close_ks, close_ks)))
+    mask = cv2.morphologyEx(
+        mask,
+        cv2.MORPH_OPEN,
+        cv2.getStructuringElement(cv2.MORPH_RECT, (open_ks, open_ks)),
+    )
+    mask = cv2.morphologyEx(
+        mask,
+        cv2.MORPH_CLOSE,
+        cv2.getStructuringElement(cv2.MORPH_RECT, (close_ks, close_ks)),
+    )
     mask = fill_holes(mask)
     return to_u8(mask)
+
+
 """
 def fill_holes(mask: np.ndarray) -> np.ndarray:
     # Rellena agujeros en una máscara binaria 0/255 usando flood fill
@@ -180,6 +187,8 @@ def fill_holes(mask: np.ndarray) -> np.ndarray:
     filled = cv2.bitwise_or(mask, flood_inv)
     return filled
 """
+
+
 def keep_largest_component(mask: np.ndarray) -> np.ndarray:
     cnts, _ = cv2.findContours(mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
     out = np.zeros_like(mask)
@@ -189,14 +198,17 @@ def keep_largest_component(mask: np.ndarray) -> np.ndarray:
     cv2.drawContours(out, [c], -1, 255, -1)
     return out
 
+
 def clear_border(mask: np.ndarray) -> np.ndarray:
     # Elimina componentes que tocan el borde
     h, w = mask.shape
     lab = np.zeros((h + 2, w + 2), np.uint8)
     tmp = mask.copy()
-    cv2.floodFill(tmp, lab, (0, 0), 128) # marcar fondo conectado al borde
+    cv2.floodFill(tmp, lab, (0, 0), 128)  # marcar fondo conectado al borde
     mask_no_border = np.where(tmp == 128, 0, mask).astype(np.uint8)
     return mask_no_border
+
+
 """
 def edges_to_region(edges: np.ndarray, thresh=40, dilate_ks=7) -> np.ndarray:
     # De bordes a región sólida
@@ -208,25 +220,29 @@ def edges_to_region(edges: np.ndarray, thresh=40, dilate_ks=7) -> np.ndarray:
     binm = cv2.morphologyEx(binm, cv2.MORPH_OPEN, np.ones((3, 3), np.uint8))
     return binm
 """
+
+
 def to_u8(mask):
     mask = mask.astype(np.uint8)
     if mask.max() <= 1:
         mask = mask * 255
     return mask
 
+
 def fill_holes(mask):
     mask = to_u8(mask)
     h, w = mask.shape
     ff = mask.copy()
     lab = np.zeros((h + 2, w + 2), np.uint8)
-    cv2.floodFill(ff, lab, (0, 0), 255) # fondo conectado al borde
+    cv2.floodFill(ff, lab, (0, 0), 255)  # fondo conectado al borde
     inv = cv2.bitwise_not(ff)
     return cv2.bitwise_or(mask, inv)
+
 
 def edges_to_region(edges, thresh=35, dilate_ks=5):
     binm = ((edges > thresh).astype(np.uint8)) * 255
     if dilate_ks > 0:
-       k = cv2.getStructuringElement(cv2.MORPH_RECT, (dilate_ks, dilate_ks))
+        k = cv2.getStructuringElement(cv2.MORPH_RECT, (dilate_ks, dilate_ks))
     binm = cv2.dilate(binm, k, 1)
     binm = fill_holes(binm)
     binm = cv2.morphologyEx(binm, cv2.MORPH_OPEN, np.ones((3, 3), np.uint8))

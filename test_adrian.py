@@ -1,5 +1,4 @@
 import cv2
-import numpy as np
 import matplotlib.pyplot as plt
 import os
 from pathlib import Path
@@ -8,9 +7,10 @@ from segmentation import hybrid_mask_fft_color_lab  # tu función de máscara
 from filtering import connected_components  # tu función de componentes conectados
 
 # === CONFIGURACIÓN ===
-DATASET_PATH = "./datasets/qsd2_w3"  # carpeta con tus imágenes
+DATASET_PATH = "./datasets/qsd2_w3/non_augmented"  # carpeta con tus imágenes
 OUTPUT_PATH = "./outputs_detected"
 os.makedirs(OUTPUT_PATH, exist_ok=True)
+
 
 def main():
     # Obtener lista de imágenes
@@ -65,8 +65,15 @@ def main():
         for i, comp in enumerate(components):
             x1, y1, x2, y2 = comp["bbox"]
             cv2.rectangle(vis, (x1, y1), (x2, y2), (0, 255, 0), 2)
-            cv2.putText(vis, f"#{i+1}", (x1, y1 - 10),
-                        cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 255, 0), 2)
+            cv2.putText(
+                vis,
+                f"#{i + 1}",
+                (x1, y1 - 10),
+                cv2.FONT_HERSHEY_SIMPLEX,
+                0.6,
+                (0, 255, 0),
+                2,
+            )
 
         plt.figure(figsize=(8, 6))
         plt.imshow(vis)
@@ -77,18 +84,18 @@ def main():
         fig_path = Path(OUTPUT_PATH) / f"{img_path.stem}_detected_figure.png"
         fig.savefig(fig_path, dpi=150, bbox_inches="tight", pad_inches=0.05)
         plt.show()
-        plt.close(fig) # opcional, libera memoria en bucles largos
+        plt.close(fig)  # opcional, libera memoria en bucles largos
 
         img_path_out = Path(OUTPUT_PATH) / f"{img_path.stem}_detected.png"
         cv2.imwrite(str(img_path_out), cv2.cvtColor(vis, cv2.COLOR_RGB2BGR))
         print(f"Imagen guardada en {img_path_out}")
         print(f"Figura guardada en {fig_path}")
 
-
         # Guardar imagen con detecciones
         output_file = Path(OUTPUT_PATH) / f"{img_path.stem}_detected.png"
         cv2.imwrite(str(output_file), cv2.cvtColor(vis, cv2.COLOR_RGB2BGR))
         print(f"Imagen guardada en {output_file}\n")
+
 
 if __name__ == "__main__":
     main()

@@ -89,9 +89,9 @@ for p in sorted(Q_DIR.glob("*")):
     rows.append(r)
     imgs.append((p, img, gray))
 
-#if not rows:
+# if not rows:
 #    print("[WARN] No s'han trobat imatges.")
-#else:
+# else:
 #    print(f"[INFO] Imatges trobades: {len(rows)}")
 
 
@@ -119,12 +119,12 @@ TH_RES = max(p90_res, ABS_RES_MIN)
 TH_SIG = max(p90_sig, ABS_SIG_MIN)
 TH_HP = max(p90_hp, ABS_HP_MIN)
 
-#print(
+# print(
 #    f"[INFO] Percentils p90 -> sp:{p90_sp:.4f}, res:{p90_res:.4f}, sig:{p90_sig:.2f}, hp:{p90_hp:.2f}"
-#)
-#print(
+# )
+# print(
 #    f"[INFO] Llindars finals -> SP:{TH_SP:.4f} RES:{TH_RES:.4f} SIG:{TH_SIG:.2f} HP:{TH_HP:.2f}"
-#)
+# )
 
 # Desa CSV de mètriques
 with open(PLOTS / "noise_scores.csv", "w", newline="") as f:
@@ -133,7 +133,7 @@ with open(PLOTS / "noise_scores.csv", "w", newline="") as f:
     )
     w.writeheader()
     w.writerows(rows)
-#print(f"[INFO] CSV -> {PLOTS / 'noise_scores.csv'}")
+# print(f"[INFO] CSV -> {PLOTS / 'noise_scores.csv'}")
 
 
 # ---------- 3) Funció de decisió + denoise escalonat ----------
@@ -252,6 +252,7 @@ for i, (p, img, gray) in enumerate(imgs):
         )
         plt.close(fig)
 
+
 def denoise_image(img: np.ndarray) -> np.ndarray:
     # STEP 1: Escora totes les imatges i calcula mètriques
     gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
@@ -260,11 +261,11 @@ def denoise_image(img: np.ndarray) -> np.ndarray:
         "res": impulse_residue(gray),
         "sig": sigma_on_weak_texture(gray),
         "hp": hp_energy(gray),
-        "sharp": lap_var(gray)
+        "sharp": lap_var(gray),
     }
-    #rows.append(r)
-    #imgs.append((p, img, gray))
-    
+    # rows.append(r)
+    # imgs.append((p, img, gray))
+
     # STEP 2: Llindars adaptatius per percentils (+mínims absoluts)
     """
     sp_arr = np.array(r["sp"])
@@ -303,7 +304,7 @@ def denoise_image(img: np.ndarray) -> np.ndarray:
     }
     out, choice, sharp0, sharp1 = decide_and_denoise(img, metrics)
     did_filter = (choice != "skip") and ("reverted" not in choice)
-    
+
     """
     # Desa la imatge denoised si s'ha aplicat filtrat
     if did_filter:
