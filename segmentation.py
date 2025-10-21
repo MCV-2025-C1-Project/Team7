@@ -3,10 +3,13 @@ from filtering import (
     segment_rgb_threshold,
     erode_mask,
     dilate_mask,
+    opening,
+    closing,
     compute_centroid,
     get_center_and_crop,
     get_center_and_mask_crop,
     get_center_and_hollow_mask,
+    connected_components,
 )
 import cv2
 import numpy as np
@@ -125,7 +128,7 @@ def hybrid_mask_fft_color_lab(img_bgr):
 
     # 3) Lab + Otsu (todos los cuadros)
     mask_lab = compute_mask_lab_otsu(img_bgr)
-
+    mask_lab = closing(mask_lab, k= 3)
     # 4) Combinación robusta (equiv. a OR)
     combined = cv2.max(mask_lab, cv2.max(mask_rgb, edge_region))
 
@@ -238,7 +241,7 @@ def fill_holes(mask):
     inv = cv2.bitwise_not(ff)
     return cv2.bitwise_or(mask, inv)
 
-
+"""
 def edges_to_region(edges, thresh=35, dilate_ks=5):
     binm = ((edges > thresh).astype(np.uint8)) * 255
     if dilate_ks > 0:
@@ -247,3 +250,99 @@ def edges_to_region(edges, thresh=35, dilate_ks=5):
     binm = fill_holes(binm)
     binm = cv2.morphologyEx(binm, cv2.MORPH_OPEN, np.ones((3, 3), np.uint8))
     return to_u8(binm)
+"""
+def edges_to_region(edges, thresh=35, dilate_ks=5):
+    # 1) Umbral -> 0/1
+    binm = (edges.astype(np.uint8) > thresh).astype(np.uint8)
+
+    # 2) Dilatación opcional (sobre 0/1)
+    if dilate_ks and dilate_ks > 0:
+        k = cv2.getStructuringElement(cv2.MORPH_RECT, (dilate_ks, dilate_ks))
+        binm = (binm * 255).astype(np.uint8)
+        if dilate_ks and dilate_ks > 0:
+            binm = dilate_mask(binm, kernel_size=dilate_ks)
+        binm = (binm > 0).astype(np.uint8)
+    # 3) Pasamos a 0/255 para las operaciones OpenCV siguientes
+    binm = (binm * 255).astype(np.uint8)
+
+    # 4) Limpieza opcional (si no las necesitas, puedes comentar estas dos líneas)
+    binm = fill_holes(binm)
+    binm = cv2.morphologyEx(binm, cv2.MORPH_OPEN, np.ones((3, 3), np.uint8))
+
+    # 5) Forzar salida binaria exacta 0/255
+    binm = ((binm > 0).astype(np.uint8)) * 255
+    return binm
+
+
+def get_mask_and_crops(
+img_bgr: np.ndarray,
+use_mask: str = "mask_lab", # "mask_lab", "refined", "combined", etc.
+min_area: int = 2000,
+reject_border: bool = True,
+border_margin: int = 2,
+outermost_only: bool = True,
+padding: int = 10, # padding extra para los recortes
+):
+    """
+    Devuelve máscara seleccionada y recortes por componente.
+    Returns:
+    {
+    "mask": np.ndarray (0/255),
+    "components": List[dict],
+    "crops_img": List[np.ndarray],
+    "crops_mask": List[np.ndarray],
+    "bboxes": List[tuple],
+    "vis": np.ndarray (RGB con detecciones dibujadas)
+    }
+    """
+    # Generar máscaras
+    masks = hybrid_mask_fft_color_lab(img_bgr)
+    if use_mask not in masks:
+        raise KeyError(f"use_mask '{use_mask}' no está en {list(masks.keys())}")
+    mask_sel = masks[use_mask]
+
+    # Componentes
+    comps = connected_components(
+        mask_sel,
+        min_area=min_area,
+        reject_border=reject_border,
+        border_margin=border_margin,
+        outermost_only=outermost_only,
+    )
+
+    # Recortes
+    H, W = mask_sel.shape
+    crops_img, crops_mask, bboxes = [], [], []
+    for comp in comps:
+        x1, y1, x2, y2 = comp["bbox"]
+
+        # aplicar padding y acotar
+        x1p = max(0, x1 - padding)
+        y1p = max(0, y1 - padding)
+        x2p = min(W - 1, x2 + padding)
+        y2p = min(H - 1, y2 + padding)
+
+        crop_img = img_bgr[y1p : y2p + 1, x1p : x2p + 1]
+        crop_mask = mask_sel[y1p : y2p + 1, x1p : x2p + 1]
+
+        crops_img.append(crop_img)
+        crops_mask.append(crop_mask)
+        bboxes.append((x1p, y1p, x2p, y2p))
+
+    # Visualización
+    vis = cv2.cvtColor(img_bgr, cv2.COLOR_BGR2RGB).copy()
+    for i, (x1, y1, x2, y2) in enumerate(bboxes):
+        cv2.rectangle(vis, (x1, y1), (x2, y2), (0, 255, 0), 2)
+        cv2.putText(
+            vis, f"#{i+1}", (x1, max(0, y1 - 10)),
+            cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 255, 0), 2
+        )
+
+    return {
+        "mask": mask_sel,
+        "components": comps,
+        "crops_img": crops_img,
+        "crops_mask": crops_mask,
+        "bboxes": bboxes,
+        "vis": vis,
+    }

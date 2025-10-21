@@ -7,7 +7,7 @@ from segmentation import hybrid_mask_fft_color_lab  # tu función de máscara
 from filtering import connected_components  # tu función de componentes conectados
 
 # === CONFIGURACIÓN ===
-DATASET_PATH = "./datasets/qsd2_w3/non_augmented"  # carpeta con tus imágenes
+DATASET_PATH = "./datasets/qsd2_w3"  # carpeta con tus imágenes
 OUTPUT_PATH = "./outputs_detected"
 os.makedirs(OUTPUT_PATH, exist_ok=True)
 

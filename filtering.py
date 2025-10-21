@@ -124,6 +124,11 @@ def dilate_mask(mask, kernel_size=3):
     dilated = np.any(windows == 255, axis=(2, 3)).astype(np.uint8) * 255
     return dilated
 
+def opening(mask: np.ndarray, k: int = 3) -> np.ndarray:
+    return dilate_mask(erode_mask(mask, kernel_size=k), kernel_size=k)
+
+def closing(mask: np.ndarray, k: int = 3) -> np.ndarray:
+    return erode_mask(dilate_mask(mask, kernel_size=k), kernel_size=k)
 
 def compute_centroid(mask):
     """
@@ -250,9 +255,9 @@ def get_center_and_hollow_mask(mask, padding=10):
     bbox = (x_min, y_min, x_max, y_max)
     return center, bbox, mask_hollow
 
-
+"""
 def connected_components(mask, min_area=500, connectivity=8):
-    """
+    
     Detecta componentes conectados en una máscara binaria (0/255) usando NumPy puro.
     Sin bucles anidados sobre todos los píxeles, solo sobre los blancos.
 
@@ -266,7 +271,7 @@ def connected_components(mask, min_area=500, connectivity=8):
             - 'bbox': (x_min, y_min, x_max, y_max)
             - 'center': (cx, cy)
             - 'area': número de píxeles
-    """
+
     # Convertimos a binario 0/1
     mask = (mask > 0).astype(np.uint8)
     H, W = mask.shape
@@ -326,6 +331,110 @@ def connected_components(mask, min_area=500, connectivity=8):
         )
 
     return components
+"""
+def connected_components(
+mask,
+min_area=500,
+connectivity=8,
+reject_border=True,
+border_margin=0,
+outermost_only=True,
+):
+    """
+    Detecta componentes conectados en una máscara binaria (0/255) usando NumPy puro.
+    Args:
+        mask (np.ndarray): máscara binaria
+        min_area (int): área mínima del componente
+        connectivity (int): 4 u 8
+        reject_border (bool): si True, descarta componentes que toquen el borde
+        border_margin (int): margen adicional para considerar "tocar borde"
+        outermost_only (bool): si True, elimina componentes contenidos dentro de otros
 
+    Returns:
+        List[dict]: cada elemento contiene:
+            - 'bbox': (x_min, y_min, x_max, y_max)
+            - 'center': (cx, cy)
+            - 'area': número de píxeles
+    """
+    mask = (mask > 0).astype(np.uint8)
+    H, W = mask.shape
 
+    points = np.argwhere(mask)
+    if len(points) == 0:
+        return []
+
+    points_set = set(map(tuple, points))
+    components = []
+
+    if connectivity == 8:
+        neighbors = [(-1, -1), (-1, 0), (-1, 1), (0, -1), (0, 1), (1, -1), (1, 0), (1, 1)]
+    else:
+        neighbors = [(-1, 0), (0, -1), (0, 1), (1, 0)]
+
+    while points_set:
+        seed = points_set.pop()
+        stack = [seed]
+        comp_pixels = []
+
+        while stack:
+            y, x = stack.pop()
+            comp_pixels.append((y, x))
+            for dy, dx in neighbors:
+                ny, nx = y + dy, x + dx
+                if (ny, nx) in points_set:
+                    points_set.remove((ny, nx))
+                    stack.append((ny, nx))
+
+        comp_pixels = np.array(comp_pixels)
+        area = len(comp_pixels)
+        if area < min_area:
+            continue
+
+        ys, xs = comp_pixels[:, 0], comp_pixels[:, 1]
+        x_min, x_max = xs.min(), xs.max()
+        y_min, y_max = ys.min(), ys.max()
+
+        # Opción: descartar componentes que toquen el borde
+        if reject_border:
+            if (
+                x_min <= border_margin
+                or y_min <= border_margin
+                or x_max >= W - 1 - border_margin
+                or y_max >= H - 1 - border_margin
+            ):
+                continue
+
+        cx = int(xs.mean())
+        cy = int(ys.mean())
+
+        components.append({"bbox": (x_min, y_min, x_max, y_max),
+                        "center": (cx, cy),
+                        "area": area})
+
+    # Opción: quedarnos con los más exteriores (eliminar los contenidos)
+    if outermost_only and components:
+        keep = [True] * len(components)
+
+        def contained(bi, bj, tol=0):
+            xi1, yi1, xi2, yi2 = bi
+            xj1, yj1, xj2, yj2 = bj
+            return (xi1 >= xj1 + tol and yi1 >= yj1 + tol and
+                    xi2 <= xj2 - tol and yi2 <= yj2 - tol)
+
+        for i in range(len(components)):
+            if not keep[i]:
+                continue
+            bi = components[i]["bbox"]
+            for j in range(len(components)):
+                if i == j or not keep[j]:
+                    continue
+                bj = components[j]["bbox"]
+                # si el bbox i está contenido en j, descartamos i
+                if contained(bi, bj, tol=1):
+                    keep[i] = False
+                    break
+
+        components = [c for k, c in enumerate(components) if keep[k]]
+
+    return components
 # ADVO FIN : Laplacian Filter
