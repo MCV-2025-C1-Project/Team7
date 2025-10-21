@@ -67,6 +67,18 @@ def guided_like(bgr):
     sharp = cv2.addWeighted(den, 1.0, cv2.GaussianBlur(den, (0, 0), 1.0), -0.15, 0)
     return sharp
 
+def to_YCrCb(bgr):
+    ycc = cv2.cvtColor(bgr, cv2.COLOR_BGR2YCrCb)
+    Y, Cr, Cb = ycc[:,:,0], ycc[:,:,1], ycc[:,:,2]
+    return Y.astype(np.uint8), Cr.astype(np.uint8), Cb.astype(np.uint8)
+
+def from_YCrCb(Y, Cr, Cb):
+    ycc = cv2.merge([Y, Cr, Cb])
+    return cv2.cvtColor(ycc, cv2.COLOR_YCrCb2BGR)
+
+def clamp01(x): return max(0.0, min(1.0, float(x)))
+
+
 
 # ---------- 1) Escora totes les imatges i calcula mètriques ----------
 rows, imgs = [], []
@@ -139,71 +151,79 @@ with open(PLOTS / "noise_scores.csv", "w", newline="") as f:
 # ---------- 3) Funció de decisió + denoise escalonat ----------
 def decide_and_denoise(bgr, metrics):
     """
-    Regles:
-    - SP o RES alts → median 3x3; si RES segueix alt → 5x5; després millora vores amb bilateral suau.
-    - SIG o HP alts → NLM; si la imatge és molt nítida → prova bilateral/guided_like i tria el que preserva més Laplacià.
-    - Salvaguarda: no permetre caiguda de nitidesa > 20% (Laplacià).
+    Estratègia:
+    - Filtra principalment la luminància (Y) i conserva Cr/Cb.
+    - Paràmetres (median/bilateral/NLM) escalen amb la severitat.
+    - Safeguarda: no permetre caiguda de Laplacià(Y) > 20%.
     """
-    gray = cv2.cvtColor(bgr, cv2.COLOR_BGR2GRAY)
-    sharp0 = lap_var(gray)
+    Y0, Cr, Cb = to_YCrCb(bgr)
+    sharp0 = lap_var(Y0)
+
+    sp, res, sig, hp = metrics["sp"], metrics["res"], metrics["sig"], metrics["hp"]
     reasons = []
-    if metrics["sp"] >= TH_SP:
-        reasons.append("SP")
-    if metrics["res"] >= TH_RES:
-        reasons.append("RES")
-    if metrics["sig"] >= TH_SIG:
-        reasons.append("SIG")
-    if metrics["hp"] >= TH_HP:
-        reasons.append("HP")
+    if sp >= TH_SP:  reasons.append("SP")
+    if res >= TH_RES: reasons.append("RES")
+    if sig >= TH_SIG: reasons.append("SIG")
+    if hp >= TH_HP:  reasons.append("HP")
 
     if not reasons:
         return bgr, "skip", sharp0, sharp0
 
-    out, choice = bgr.copy(), None
+    # Normalitza severitats [0,1] respecte als llindars ( >1 cap a 1 )
+    sev_sp  = clamp01(sp  / (TH_SP  * 1.8))
+    sev_res = clamp01(res / (TH_RES * 2.0))
+    sev_sig = clamp01(sig / (TH_SIG * 2.0))
+    sev_hp  = clamp01(hp  / (TH_HP  * 2.0))
 
-    # Cas impulsos (salt-&-pepper o residu alt)
+    Y = Y0.copy()
+    choice_parts = []
+
+    # --- Cas IMPULSOS (salt&pepper / residu) sobre Y ---
     if ("SP" in reasons) or ("RES" in reasons):
-        out = cv2.medianBlur(out, 3)
-        choice = "median 3x3"
-        res_after = impulse_residue(cv2.cvtColor(out, cv2.COLOR_BGR2GRAY))
+        # mida de mediana segons severitat
+        k = 3 if max(sev_sp, sev_res) < 0.35 else (5 if max(sev_sp, sev_res) < 0.7 else 7)
+        Y = cv2.medianBlur(Y, k)
+        choice_parts.append(f"median {k}x{k}")
+
+        # residu encara alt? una segona passada suau
+        res_after = impulse_residue(Y)
         if res_after > TH_RES:
-            out = cv2.medianBlur(out, 5)
-            choice = "median 5x5"
-        # recuperar vores una mica
-        out = bilateral(out, d=5, sC=20, sS=5)
-        choice += " + bilateral"
+            k2 = 3 if k == 3 else 5
+            Y = cv2.medianBlur(Y, k2)
+            choice_parts.append(f"+ median {k2}x{k2}")
 
-    # Cas gaussian/alta-freq
-    elif ("SIG" in reasons) or ("HP" in reasons):
-        cand = []
-        # NLM suau
-        nlm = nlm_colored(bgr, h=8, hColor=8, tw=7, sw=21)
-        cand.append(("NLM h8", nlm))
-        # si molt nítida, prova alternatives i tria la millor per Laplacià post
-        if sharp0 > 180.0:
-            bil = bilateral(bgr, d=7, sC=25, sS=7)
-            cand.append(("bilateral d7 sC25 sS7", bil))
-            gui = guided_like(bgr)
-            cand.append(("guided-like", gui))
-        # Escull pel millor compromís: Laplacià alt i residu baix respecte original
-        best, best_name, best_score = None, None, -1e9
-        for name, im in cand:
-            g = cv2.cvtColor(im, cv2.COLOR_BGR2GRAY)
-            sh = lap_var(g)
-            # penalitza oversmooth i massa diferència
-            diff = (
-                float(np.mean(np.abs(g.astype(np.int16) - gray.astype(np.int16))))
-                / 255.0
-            )
-            score = sh - 50.0 * diff
-            if score > best_score:
-                best, best_name, best_score = im, name, score
-        out, choice = best, best_name
+        # suavitza soroll fi però preserva vores
+        sC = int(10 + 30 * max(sev_sig, sev_hp))
+        sS = int(3 + 7  * max(sev_sig, sev_hp))
+        Y = cv2.bilateralFilter(Y, d=5, sigmaColor=sC, sigmaSpace=sS)
+        choice_parts.append(f"+ bilateral(Y) sC{sC} sS{sS}")
 
-    sharp1 = lap_var(cv2.cvtColor(out, cv2.COLOR_BGR2GRAY))
-    if sharp1 < 0.8 * sharp0:  # salvaguarda
+    # --- Cas GAUSSIÀ/alta freq: NLM sobre Y + (opcional) bilateral color suau ---
+    if (("SIG" in reasons) or ("HP" in reasons)) and not (("SP" in reasons) or ("RES" in reasons)):
+        # força NLM segons severitat
+        sev = 0.6*sev_sig + 0.4*sev_hp
+        hY = 4 + int(18 * sev)        # 4..22
+        # NLM només en Y: implementació via BGR → convertim
+        tmp = from_YCrCb(Y, Cr, Cb)
+        tmp = cv2.fastNlMeansDenoisingColored(tmp, None, h=hY, hColor= max(3, hY//2),
+                                              templateWindowSize=7, searchWindowSize=21)
+        Y = to_YCrCb(tmp)[0]
+        choice_parts.append(f"NLM(Y) h{hY}")
+
+        # lleu bilateral en color per treure crominància sorollosa
+        sC = 8 + int(20 * sev)
+        out_color = cv2.bilateralFilter(bgr, d=3, sigmaColor=sC, sigmaSpace=3)
+        _, Cr, Cb = to_YCrCb(out_color)
+        choice_parts.append(f"+ bilateral(color) sC{sC}")
+
+    # --- Recombina i salvaguarda d'agudesa ---
+    out = from_YCrCb(Y, Cr, Cb)
+    sharp1 = lap_var(Y)
+    if sharp1 < 0.8 * sharp0:
         return bgr, "reverted (oversmooth)", sharp0, sharp0
-    return out, choice, sharp0, sharp1
+
+    return out, " | ".join(choice_parts), sharp0, sharp1
+
 
 
 # ---------- 4) Força TOP-N per assegurar exemples als plots ----------

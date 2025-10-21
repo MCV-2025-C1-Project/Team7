@@ -19,11 +19,12 @@ from similarity import (
 from segmentation import compute_binary_mask_2
 from retrieval import retrieval
 from preprocess import preprocess_images
-from metrics import mean_average_precision_K, binary_mask_evaluation, PSNR, SSIM
+from metrics import mean_average_precision_K, binary_mask_evaluation
 import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
 import copy
+from skimage.metrics import structural_similarity as ssim_metric
 
 DISTANCE_FUNCTIONS = [
     compute_euclidean_distance,
@@ -33,6 +34,7 @@ DISTANCE_FUNCTIONS = [
     compute_hellinger_distance,
 ]
 TOPK = [1, 5, 10]  # Values of K for mAP@K evaluation
+
 
 
 def compute_test_retrieval(
@@ -376,6 +378,16 @@ def test_weekn_weekm(weekn: int = 2, weekm: int = 3):
         for img_path in qsd1_3_original_pathlist
     }
 
+    def to_rgb01(bgr):
+        rgb = cv2.cvtColor(bgr, cv2.COLOR_BGR2RGB).astype(np.float32) / 255.0
+        return rgb
+    
+    def to_Y01(bgr):
+        ycrcb = cv2.cvtColor(bgr, cv2.COLOR_BGR2YCrCb)
+        Y = ycrcb[:,:,0].astype(np.float32) / 255.0
+        return Y
+
+
     # WEEK 3 TASK 1: NOISE FILTER EVALUATION
     filtered_images = copy.deepcopy(qsd1_3_images)
     preprocess_images(filtered_images)
@@ -383,48 +395,44 @@ def test_weekn_weekm(weekn: int = 2, weekm: int = 3):
     avgPSNR = 0
     vSSIM = []
     avgSSIM = 0
-    for name, img in filtered_images.items():
-        noisy_image = qsd1_3_images[name]
-        noisy_image = cv2.resize(noisy_image, (256, 256), interpolation=cv2.INTER_AREA)
-        original_image = qsd1_3_original_images[name]
-        original_image = cv2.resize(original_image, (256, 256), interpolation=cv2.INTER_AREA)
-        img_f = original_image.astype(np.float32) + 1e-6
-        mB, mG, mR = [img_f[:, :, c].mean() for c in range(3)]
-        g = (mB + mG + mR) / 3.0
-        img_f[:, :, 0] *= g / mB
-        img_f[:, :, 1] *= g / mG
-        img_f[:, :, 2] *= g / mR
-        img_bal = np.clip(img_f, 0, 255).astype(np.uint8)
-        
-        original_rgb = cv2.cvtColor(original_image, cv2.COLOR_BGR2RGB)
-        plt.imshow(original_rgb)
-        plt.show()
-        
-        img_bal_rgb = cv2.cvtColor(img_bal, cv2.COLOR_BGR2HSV)
-        plt.imshow(img_bal_rgb)
-        plt.show()
-        
-        noisy_rgb = cv2.cvtColor(noisy_image, cv2.COLOR_BGR2RGB)
-        plt.imshow(noisy_rgb)
-        plt.show()
-        
-        filtered_rgb = cv2.cvtColor(img, cv2.COLOR_BGR2HSV)
-        plt.imshow(filtered_rgb)
-        plt.show()
-        
-        psnr = PSNR(img_bal_rgb, filtered_rgb)
-        ssim = SSIM(img_bal_rgb, filtered_rgb)
-        # print(f"psnr {psnr}")
-        # print(f"ssim {ssim}")
-        avgPSNR += psnr
-        avgSSIM += ssim
-        vPSNR.append(psnr)
-        vSSIM.append(ssim)
-    avgPSNR /= len(qsd1_3_images)
-    avgSSIM /= len(qsd1_3_images)
+    for name, filt_bgr in filtered_images.items():
+        ref_bgr = qsd1_3_original_images[name]
+
+        # Mateix resize per a tots dos
+        ref_bgr  = cv2.resize(ref_bgr,  (256, 256), interpolation=cv2.INTER_AREA)
+        filt_bgr = cv2.resize(filt_bgr, (256, 256), interpolation=cv2.INTER_AREA)
+
+        # (Opcional) balanç de blancs idèntic a tots dos si vols fer-lo part del preproc
+        def gray_world(bgr):
+            f = bgr.astype(np.float32) + 1e-6
+            mB, mG, mR = [f[:,:,c].mean() for c in range(3)]
+            g = (mB + mG + mR) / 3.0
+            f[:,:,0] *= g/mB; f[:,:,1] *= g/mG; f[:,:,2] *= g/mR
+            return np.clip(f,0,255).astype(np.uint8)
+
+        # Exemple: aplica’l a tots dos (si el teu pipeline el fa servir)
+        ref_bgr  = gray_world(ref_bgr)
+        filt_bgr = gray_world(filt_bgr)
+
+        ref = to_Y01(ref_bgr)
+        out = to_Y01(filt_bgr)
+
+        # SSIM multicanal (mitjana sobre canals)
+        s = ssim_metric(ref, out, data_range=1.0)
+        if s < 0.8:
+            print(f"❌ {name}: SSIM = {s:.3f}")
+        vSSIM.append(s); avgSSIM += s
+
+        # PSNR amb imatges [0,1]
+        mse = np.mean((ref - out) ** 2)
+        p = float('inf') if mse == 0 else 10.0 * np.log10(1.0 / mse)
+        vPSNR.append(p); avgPSNR += p
+
+    avgSSIM /= len(filtered_images)
+    avgPSNR  /= len(filtered_images)
     # print(f"Avergae PSNR: {avgPSNR}")
     # print(f"Average SSIM: {avgSSIM}")
-    """
+    
     # --- PSNR Plot ---
     plt.figure(figsize=(8, 4))
     plt.plot(vPSNR, marker='o', linestyle='-')
@@ -440,7 +448,6 @@ def test_weekn_weekm(weekn: int = 2, weekm: int = 3):
     plt.xlabel('Image Index')
     plt.ylabel('SSIM value')
     plt.show()
-    """
     # 2) Preprocess all images with the same preprocessing method (resize 256x256, color balance, contrast&brightness adjustment, smoothing)
     lists_to_preprocess = [bbdd_images, qsd1_3_images, qsd1_3_original_images]
     for i in range(len(lists_to_preprocess)):
