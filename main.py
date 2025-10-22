@@ -157,13 +157,19 @@ def compute_retrieval_template(
 
 
 def main():
-    test_weekn_weekm()
-    # best_of_each_week()
+    # test_weekn_weekm()
+    best_of_each_week()
 
 
 def best_of_each_week():
     week2_best_bins = [4, 4, 2]
     week2_best_grid = (9, 9)
+    week3_best_glcm_grid = (12, 12)
+    week3_best_dist = [1, 3, 5]
+    week3_best_lvl = 8
+    week3_best_ncoefs = 30
+    week3_best_grid = (3, 3)
+    
     qsd1_pathlist = list(
         Path(Path(__file__).parent / "datasets" / "qsd1_w1").glob("*.jpg")
     )
@@ -174,7 +180,13 @@ def best_of_each_week():
         Path(Path(__file__).parent / "datasets" / "qsd2_w2").glob("*.png")
     )
     qsd1_3_pathlist = list(
-        Path(Path(__file__).parent / "datasets" / "qsd1_w3").glob("*.jpg")
+        Path(Path(__file__).parent / "datasets" / "qsd1_w3").glob("*.jpg") #  / "non_augmented"
+    )
+    qsd2_3_pathlist = list(
+        Path(Path(__file__).parent / "datasets" / "qsd2_w3").glob("*.jpg")
+    )
+    qsd2_3_masks_pathlist = list(
+        Path(Path(__file__).parent / "datasets" / "qsd2_w3").glob("*.png")
     )
     qst1_pathlist = list(
         Path(Path(__file__).parent / "datasets" / "qst1_w2").glob("*.jpg")
@@ -188,6 +200,7 @@ def best_of_each_week():
     gt_qsd1_w1 = pickle.load(open("./datasets/qsd1_w1/gt_corresps.pkl", "rb"))
     gt_qsd2_w2 = pickle.load(open("./datasets/qsd2_w2/gt_corresps.pkl", "rb"))
     gt_qsd1_w3 = pickle.load(open("./datasets/qsd1_w3/gt_corresps.pkl", "rb"))
+    gt_qsd2_w3 = pickle.load(open("./datasets/qsd2_w3/gt_corresps.pkl", "rb"))
 
     # 1.1) Load all images into a dictionary, key is the filename without extension and value is the image in bgr
     bbdd_images = {
@@ -199,6 +212,12 @@ def best_of_each_week():
     qsd2_images = {
         img_path.stem: cv2.imread(str(img_path)) for img_path in qsd2_pathlist
     }
+    qsd1_3_images = {
+        img_path.stem: cv2.imread(str(img_path)) for img_path in qsd1_3_pathlist
+    }
+    qsd2_3_images = {
+        img_path.stem: cv2.imread(str(img_path)) for img_path in qsd2_3_pathlist
+    }
     qst1_images = {
         img_path.stem: cv2.imread(str(img_path)) for img_path in qst1_pathlist
     }
@@ -209,8 +228,9 @@ def best_of_each_week():
         img_path.stem: cv2.imread(str(img_path), cv2.IMREAD_GRAYSCALE)
         for img_path in qsd2_masks_pathlist
     }
-    qsd1_3_images = {
-        img_path.stem: cv2.imread(str(img_path)) for img_path in qsd1_3_pathlist
+    qsd2_3_gt_masks = {
+        img_path.stem: cv2.imread(str(img_path), cv2.IMREAD_GRAYSCALE)
+        for img_path in qsd2_3_masks_pathlist
     }
 
     # WEEK 2 best segmentation method evaluation on qsd2_w2
@@ -252,9 +272,10 @@ def best_of_each_week():
         bbdd_images,
         qsd1_images,
         qsd2_images,
+        qsd1_3_images,
+        qsd2_3_images,
         qst1_images,
         qst2_images,
-        qsd1_3_images,
     ]
     for i in range(len(lists_to_preprocess)):
         lists_to_preprocess[i] = preprocess_images(lists_to_preprocess[i])
@@ -286,23 +307,58 @@ def best_of_each_week():
         f"WEEK 2: hsv_block_hist_concat bins={week2_best_bins} grid={week2_best_grid}, qsd2_w2"
     )
     print(pd.DataFrame(map_results))
+    
+    # WEEK 2 best method execution on qsd1_w3
+    map_results = compute_retrieval_template(
+        bbdd_images, qsd1_3_images, my_hsv_block_hist_concat, gt_qsd1_w3, "qsd1_w3"
+    )
+    print(
+        f"WEEK 2: hsv_block_hist_concat bins={week2_best_bins} grid={week2_best_grid}, qsd1_w3"
+    )
+    print(pd.DataFrame(map_results))
+    
+    # WEEK 3 best method execution on qsd1_w3
+    my_glcm_block_descriptor = glcm_block_descriptor_func(
+        grid=week3_best_glcm_grid,
+        distances=week3_best_dist,
+        levels=week3_best_lvl,
+    )
+    map_results = compute_retrieval_template(
+        bbdd_images, qsd1_3_images, my_glcm_block_descriptor, gt_qsd1_w3, "qsd1_w3"
+    )
+    print(
+        f"WEEK 3: GLCM grid={week3_best_glcm_grid} distances={week3_best_dist} levels={week3_best_lvl}, qsd1_w3"
+    )
+    print(pd.DataFrame(map_results))
+    my_dct_block_descriptor = dct_block_descriptor_func(
+        n_coefs=week3_best_ncoefs,
+        grid=week3_best_grid,
+        relative_coefs=False,
+    )
+    map_results = compute_retrieval_template(
+        bbdd_images, qsd1_3_images, my_dct_block_descriptor, gt_qsd1_w3, "qsd1_w3"
+    )
+    print(
+        f"WEEK 3: DCT grid={week3_best_grid} n_coefs={week3_best_ncoefs}, qsd1_w3"
+    )
+    print(pd.DataFrame(map_results))
 
-    # WEEK 2 generate results for qst1_w2
-    compute_test_retrieval(
-        bbdd_images,
-        qst1_images,
-        my_hsv_block_hist_concat,
-        compute_euclidean_distance,
-        "qst1_w2",
-    )
-    # WEEK 2 generate results for qst2_w2
-    compute_test_retrieval(
-        bbdd_images,
-        qst2_images,
-        my_hsv_block_hist_concat,
-        compute_euclidean_distance,
-        "qst2_w2",
-    )
+    # # WEEK 2 generate results for qst1_w2
+    # compute_test_retrieval(
+    #     bbdd_images,
+    #     qst1_images,
+    #     my_hsv_block_hist_concat,
+    #     compute_euclidean_distance,
+    #     "qst1_w3",
+    # )
+    # # WEEK 2 generate results for qst2_w2
+    # compute_test_retrieval(
+    #     bbdd_images,
+    #     qst2_images,
+    #     my_hsv_block_hist_concat,
+    #     compute_euclidean_distance,
+    #     "qst2_w2",
+    # )
 
 
 # main function adapted for week 1&2 comparisons:

@@ -11,11 +11,14 @@ TESTING_BINS = [[4, 4, 2]]
 TESTING_GRIDS = [(9, 9)]
 WEEK3_BINS = [4, 16, 32, 64, 128, 257]
 WEEK3_GRIDS = [(3, 3), (5, 5), (7, 7), (11, 11)]
-NCOEFS_LIST = [25, 50, 75, 100]
-RELATIVE_COEFS = True
+RELATIVE_COEFS = False
+if RELATIVE_COEFS:
+    NCOEFS_LIST = [25, 50, 75, 100]
+else:
+    NCOEFS_LIST = [10, 20, 30, 40, 50]
 LBP_POINTS = [8, 16, 24]
 LBP_RADIUS = [1, 2, 3]
-GLCM_GRIDS = [(1, 1), (2, 2), (4, 4), (6, 6), (8, 8), (10, 10), (12, 12), (16, 16)]
+GLCM_GRIDS = [(1, 1), (2, 2), (4, 4), (6, 6), (8, 8), (10, 10), (12, 12), (14, 14), (16, 16)]
 GLCM_DISTANCES = [[1, 2], [1, 2, 3], [1, 3, 5]]
 GLCM_LEVELS = [256, 128, 64, 32, 16, 8]
 
@@ -868,7 +871,7 @@ def main(results_dir: str = "./df_results/qsd1_w3"):
 
 if __name__ == "__main__":
     # Default results directory from test_weekn_weekm function
-    results_dir = "./df_results/no_preprocess_resize"
+    results_dir = "./df_results/no_preprocess_no_resize"
 
     # You can also analyze other result directories:
     # results_dir = "./df_results/preprocess_resize_256"
