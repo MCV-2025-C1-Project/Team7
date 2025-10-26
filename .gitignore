@@ -32,3 +32,5 @@ df_results/
 plots*
 output_masks*
 /outputs_detected
+week\ 3\ plts/
+avg\ psnssim.txt
