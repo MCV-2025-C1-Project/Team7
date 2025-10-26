@@ -1,13 +1,8 @@
 from filtering import (
     segment_rgb_double_threshold,
-    segment_rgb_threshold,
     erode_mask,
     dilate_mask,
-    opening,
     closing,
-    compute_centroid,
-    get_center_and_crop,
-    get_center_and_mask_crop,
     get_center_and_hollow_mask,
     connected_components,
 )
@@ -128,7 +123,7 @@ def hybrid_mask_fft_color_lab(img_bgr):
 
     # 3) Lab + Otsu (todos los cuadros)
     mask_lab = compute_mask_lab_otsu(img_bgr)
-    mask_lab = closing(mask_lab, k= 3)
+    mask_lab = closing(mask_lab, k=15)
     # 4) Combinación robusta (equiv. a OR)
     combined = cv2.max(mask_lab, cv2.max(mask_rgb, edge_region))
 
@@ -241,6 +236,7 @@ def fill_holes(mask):
     inv = cv2.bitwise_not(ff)
     return cv2.bitwise_or(mask, inv)
 
+
 """
 def edges_to_region(edges, thresh=35, dilate_ks=5):
     binm = ((edges > thresh).astype(np.uint8)) * 255
@@ -251,13 +247,15 @@ def edges_to_region(edges, thresh=35, dilate_ks=5):
     binm = cv2.morphologyEx(binm, cv2.MORPH_OPEN, np.ones((3, 3), np.uint8))
     return to_u8(binm)
 """
+
+
 def edges_to_region(edges, thresh=35, dilate_ks=5):
     # 1) Umbral -> 0/1
     binm = (edges.astype(np.uint8) > thresh).astype(np.uint8)
 
     # 2) Dilatación opcional (sobre 0/1)
     if dilate_ks and dilate_ks > 0:
-        k = cv2.getStructuringElement(cv2.MORPH_RECT, (dilate_ks, dilate_ks))
+        # k = cv2.getStructuringElement(cv2.MORPH_RECT, (dilate_ks, dilate_ks))
         binm = (binm * 255).astype(np.uint8)
         if dilate_ks and dilate_ks > 0:
             binm = dilate_mask(binm, kernel_size=dilate_ks)
@@ -274,14 +272,76 @@ def edges_to_region(edges, thresh=35, dilate_ks=5):
     return binm
 
 
+def get_crops_from_gt_mask(
+    img_bgr: np.ndarray,
+    mask_gt: np.ndarray,
+    min_area: int = 2000,
+    reject_border: bool = False,
+    border_margin: int = 2,
+    outermost_only: bool = True,
+    padding: int = 10,
+) -> list[np.ndarray]:
+    """
+    Generates crops from a ground truth mask.
+
+    Args:
+        img_bgr: Input image in BGR format
+        mask_gt: Ground truth mask (grayscale, 0=background, 255=object)
+        min_area: Minimum area for a component to be kept
+        reject_border: Whether to reject components touching the border
+        border_margin: Margin for border rejection
+        outermost_only: Whether to keep only outermost contours
+        padding: Extra padding for crops
+
+    Returns:
+        List of cropped images (one per detected object)
+    """
+    # Ensure mask is binary (0/255)
+    mask_binary = (mask_gt > 127).astype(np.uint8) * 255
+
+    # Find connected components
+    comps = connected_components(
+        mask_binary,
+        min_area=min_area,
+        reject_border=reject_border,
+        border_margin=border_margin,
+        outermost_only=outermost_only,
+    )
+
+    # Generate crops
+    H, W = mask_binary.shape
+    crops_img, bboxes = [], []
+
+    for comp in comps:
+        x1, y1, x2, y2 = comp["bbox"]
+
+        # Apply padding and clamp to image boundaries
+        x1p = max(0, x1 - padding)
+        y1p = max(0, y1 - padding)
+        x2p = min(W - 1, x2 + padding)
+        y2p = min(H - 1, y2 + padding)
+
+        crop_img = img_bgr[y1p : y2p + 1, x1p : x2p + 1]
+        crops_img.append(crop_img)
+        bboxes.append((x1p, y1p, x2p, y2p))
+    if len(crops_img) > 2:
+        crops_img = crops_img[:2]
+        bboxes = bboxes[:2]
+    decorated = [[bbox[0], crop] for bbox, crop in zip(bboxes, crops_img)]
+    decorated.sort(key=lambda x: x[0])
+    crops_img = [crop for _, crop in decorated]
+
+    return crops_img
+
+
 def get_mask_and_crops(
-img_bgr: np.ndarray,
-use_mask: str = "mask_lab", # "mask_lab", "refined", "combined", etc.
-min_area: int = 2000,
-reject_border: bool = True,
-border_margin: int = 2,
-outermost_only: bool = True,
-padding: int = 10, # padding extra para los recortes
+    img_list: list[np.ndarray],
+    use_mask: str = "mask_lab",  # "mask_lab", "refined", "combined", etc.
+    min_area: int = 2000,
+    reject_border: bool = True,
+    border_margin: int = 2,
+    outermost_only: bool = True,
+    padding: int = 0,  # padding extra para los recortes
 ):
     """
     Devuelve máscara seleccionada y recortes por componente.
@@ -295,6 +355,7 @@ padding: int = 10, # padding extra para los recortes
     "vis": np.ndarray (RGB con detecciones dibujadas)
     }
     """
+    img_bgr = img_list[0]
     # Generar máscaras
     masks = hybrid_mask_fft_color_lab(img_bgr)
     if use_mask not in masks:
@@ -328,14 +389,26 @@ padding: int = 10, # padding extra para los recortes
         crops_img.append(crop_img)
         crops_mask.append(crop_mask)
         bboxes.append((x1p, y1p, x2p, y2p))
+    if len(crops_img) > 2:
+        crops_img = crops_img[:2]
+        crops_mask = crops_mask[:2]
+        bboxes = bboxes[:2]
+        decorated = [[int(bbox[0]), crop] for bbox, crop in zip(bboxes, crops_img)]
+        decorated.sort(key=lambda x: x[0])
+        crops_img = [crop for _, crop in decorated]
 
     # Visualización
     vis = cv2.cvtColor(img_bgr, cv2.COLOR_BGR2RGB).copy()
     for i, (x1, y1, x2, y2) in enumerate(bboxes):
         cv2.rectangle(vis, (x1, y1), (x2, y2), (0, 255, 0), 2)
         cv2.putText(
-            vis, f"#{i+1}", (x1, max(0, y1 - 10)),
-            cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 255, 0), 2
+            vis,
+            f"#{i + 1}",
+            (x1, max(0, y1 - 10)),
+            cv2.FONT_HERSHEY_SIMPLEX,
+            0.6,
+            (0, 255, 0),
+            2,
         )
 
     return {

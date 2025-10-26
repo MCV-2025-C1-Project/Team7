@@ -18,7 +18,17 @@ else:
     NCOEFS_LIST = [10, 20, 30, 40, 50]
 LBP_POINTS = [8, 16, 24]
 LBP_RADIUS = [1, 2, 3]
-GLCM_GRIDS = [(1, 1), (2, 2), (4, 4), (6, 6), (8, 8), (10, 10), (12, 12), (14, 14), (16, 16)]
+GLCM_GRIDS = [
+    (1, 1),
+    (2, 2),
+    (4, 4),
+    (6, 6),
+    (8, 8),
+    (10, 10),
+    (12, 12),
+    (14, 14),
+    (16, 16),
+]
 GLCM_DISTANCES = [[1, 2], [1, 2, 3], [1, 3, 5]]
 GLCM_LEVELS = [256, 128, 64, 32, 16, 8]
 
@@ -184,17 +194,18 @@ def create_comparison_dataframe(all_results):
 
         for map_metric, distances in data.items():
             for distance_func, score in distances.items():
-                rows.append(
-                    {
-                        "method": method,
-                        "params": param_str,
-                        "map_metric": map_metric,
-                        "distance_function": distance_func,
-                        "score": score,
-                        "filename": result["filename"],
-                        **params,  # Include all parsed parameters
-                    }
-                )
+                if distance_func != "compute_histogram_intersection":
+                    rows.append(
+                        {
+                            "method": method,
+                            "params": param_str,
+                            "map_metric": map_metric,
+                            "distance_function": distance_func,
+                            "score": score,
+                            "filename": result["filename"],
+                            **params,  # Include all parsed parameters
+                        }
+                    )
 
     return pd.DataFrame(rows)
 
@@ -221,15 +232,15 @@ def plot_method_comparison(df, save_plots=True, save_dir: Path = Path("./plots")
         best_per_method = df_metric.groupby("method")["score"].max().reset_index()
 
         # Separate baseline from texture descriptors
-        baseline = best_per_method[best_per_method["method"] == "hsv_histogram_concat"]
+        baseline = best_per_method[best_per_method["method"] == "hsv_block_hist_concat"]
         texture_descriptors = best_per_method[
-            best_per_method["method"] != "hsv_histogram_concat"
+            best_per_method["method"] != "hsv_block_hist_concat"
         ]
         texture_descriptors = texture_descriptors.sort_values("score", ascending=False)
 
         # Create combined dataframe
         if not baseline.empty:
-            combined = pd.concat([baseline, texture_descriptors])
+            combined = pd.concat([texture_descriptors, baseline])
         else:
             combined = texture_descriptors
 
@@ -244,6 +255,7 @@ def plot_method_comparison(df, save_plots=True, save_dir: Path = Path("./plots")
             .str.replace("_concat", "")
             .str.replace("_descriptor", "")
             .str.replace("_hist", "")
+            .str.replace("block", "baseline")
         )
         ax.set_yticklabels(method_labels, fontsize=11)
         ax.set_xlabel("Score", fontsize=12)
@@ -871,7 +883,7 @@ def main(results_dir: str = "./df_results/qsd1_w3"):
 
 if __name__ == "__main__":
     # Default results directory from test_weekn_weekm function
-    results_dir = "./df_results/no_preprocess_no_resize"
+    results_dir = "./df_results/preprocess_resize"
 
     # You can also analyze other result directories:
     # results_dir = "./df_results/preprocess_resize_256"

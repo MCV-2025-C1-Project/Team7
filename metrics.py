@@ -4,7 +4,7 @@ from skimage.metrics import structural_similarity as ssim
 
 
 def mean_average_precision_K(
-    results: dict[int, list[tuple[float, int]]], gt: list[list[int]], K: int = 1
+    results: dict[int, list[list[tuple[float, int]]]], gt: list[list[int]], K: int = 1
 ):
     """
     Computes the mean average precision at K.
@@ -15,24 +15,29 @@ def mean_average_precision_K(
         The mean average precision at K.
     """
     ap_sum = 0.0
-    num_queries = len(results)
+    num_queries = 0
 
-    for query_index, retrieved in results.items():
-        relevant = gt[query_index]
-        if not relevant:
+    for query_index, list_retrieved in results.items():
+        list_relevant = gt[query_index]
+        if not list_relevant:
             continue
 
-        num_retrieved_relevant = 0
-        precision_sum = 0.0
+        for index, retrieved in enumerate(list_retrieved):
+            num_retrieved_relevant = 0
+            precision_sum = 0.0
+            try:
+                relevant = [list_relevant[index]]
+            except IndexError:
+                relevant = [list_relevant[0]]
+            for k, tuple_retrieval in enumerate(retrieved[:K], start=1):
+                img_index = tuple_retrieval[1]
+                if img_index in relevant:
+                    num_retrieved_relevant += 1
+                    precision_sum += num_retrieved_relevant / k
 
-        for k, tuple_retrieval in enumerate(retrieved[:K], start=1):
-            img_index = tuple_retrieval[1]
-            if img_index in relevant:
-                num_retrieved_relevant += 1
-                precision_sum += num_retrieved_relevant / k
-
-        if num_retrieved_relevant > 0:
-            ap_sum += precision_sum / len(relevant)
+            if num_retrieved_relevant > 0:
+                ap_sum += precision_sum / len(relevant)
+            num_queries += 1
 
     return ap_sum / num_queries if num_queries > 0 else 0.0
 

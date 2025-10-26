@@ -3,11 +3,11 @@ import numpy as np
 
 
 def retrieval(
-    bbdd_descriptors: dict[int, np.ndarray],
-    query_decriptors: dict[int, np.ndarray],
+    bbdd_descriptors: dict[int, list[np.ndarray]],
+    query_decriptors: dict[int, list[np.ndarray]],
     similarity: Callable[[np.ndarray, np.ndarray], float],
     top_k: int = 5,
-) -> dict[int, list[tuple[float, int]]]:
+) -> dict[int, list[list[tuple[float, int]]]]:
     """
     Perform image retrieval by comparing query descriptors against a database of descriptors using a specified similarity function.
     Args:
@@ -22,15 +22,20 @@ def retrieval(
     # Compute similarities
     similarities = {}
     for query_index, query_descriptor in query_decriptors.items():
-        similarities[query_index] = {}
-        for db_index, db_descriptor in bbdd_descriptors.items():
-            distance = similarity(query_descriptor, db_descriptor)
-            similarities[query_index][db_index] = distance
+        similarities[query_index] = []
+        for single_query_descriptor in query_descriptor:
+            sims = {}
+            for db_index, db_descriptor in bbdd_descriptors.items():
+                distance = similarity(single_query_descriptor, db_descriptor[0])
+                sims[db_index] = distance
+            similarities[query_index].append(sims)
 
     # Get top K results
     top_results = {}
-    for query_index, distances in similarities.items():
-        sorted_distances = sorted([(v, k) for (k, v) in distances.items()])[:top_k]
-        top_results[query_index] = sorted_distances
+    for query_index, subsims in similarities.items():
+        top_results[query_index] = []
+        for distances in subsims:
+            sorted_distances = sorted([(v, k) for (k, v) in distances.items()])[:top_k]
+            top_results[query_index].append(sorted_distances)
 
     return top_results

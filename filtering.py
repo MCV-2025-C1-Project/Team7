@@ -124,11 +124,14 @@ def dilate_mask(mask, kernel_size=3):
     dilated = np.any(windows == 255, axis=(2, 3)).astype(np.uint8) * 255
     return dilated
 
+
 def opening(mask: np.ndarray, k: int = 3) -> np.ndarray:
     return dilate_mask(erode_mask(mask, kernel_size=k), kernel_size=k)
 
+
 def closing(mask: np.ndarray, k: int = 3) -> np.ndarray:
     return erode_mask(dilate_mask(mask, kernel_size=k), kernel_size=k)
+
 
 def compute_centroid(mask):
     """
@@ -255,6 +258,7 @@ def get_center_and_hollow_mask(mask, padding=10):
     bbox = (x_min, y_min, x_max, y_max)
     return center, bbox, mask_hollow
 
+
 """
 def connected_components(mask, min_area=500, connectivity=8):
     
@@ -332,13 +336,15 @@ def connected_components(mask, min_area=500, connectivity=8):
 
     return components
 """
+
+
 def connected_components(
-mask,
-min_area=500,
-connectivity=8,
-reject_border=True,
-border_margin=0,
-outermost_only=True,
+    mask,
+    min_area=500,
+    connectivity=8,
+    reject_border=True,
+    border_margin=0,
+    outermost_only=True,
 ):
     """
     Detecta componentes conectados en una máscara binaria (0/255) usando NumPy puro.
@@ -367,7 +373,16 @@ outermost_only=True,
     components = []
 
     if connectivity == 8:
-        neighbors = [(-1, -1), (-1, 0), (-1, 1), (0, -1), (0, 1), (1, -1), (1, 0), (1, 1)]
+        neighbors = [
+            (-1, -1),
+            (-1, 0),
+            (-1, 1),
+            (0, -1),
+            (0, 1),
+            (1, -1),
+            (1, 0),
+            (1, 1),
+        ]
     else:
         neighbors = [(-1, 0), (0, -1), (0, 1), (1, 0)]
 
@@ -407,9 +422,9 @@ outermost_only=True,
         cx = int(xs.mean())
         cy = int(ys.mean())
 
-        components.append({"bbox": (x_min, y_min, x_max, y_max),
-                        "center": (cx, cy),
-                        "area": area})
+        components.append(
+            {"bbox": (x_min, y_min, x_max, y_max), "center": (cx, cy), "area": area}
+        )
 
     # Opción: quedarnos con los más exteriores (eliminar los contenidos)
     if outermost_only and components:
@@ -418,8 +433,12 @@ outermost_only=True,
         def contained(bi, bj, tol=0):
             xi1, yi1, xi2, yi2 = bi
             xj1, yj1, xj2, yj2 = bj
-            return (xi1 >= xj1 + tol and yi1 >= yj1 + tol and
-                    xi2 <= xj2 - tol and yi2 <= yj2 - tol)
+            return (
+                xi1 >= xj1 + tol
+                and yi1 >= yj1 + tol
+                and xi2 <= xj2 - tol
+                and yi2 <= yj2 - tol
+            )
 
         for i in range(len(components)):
             if not keep[i]:
@@ -435,6 +454,8 @@ outermost_only=True,
                     break
 
         components = [c for k, c in enumerate(components) if keep[k]]
-
+    components.sort(key=lambda c: c["area"], reverse=True)
     return components
+
+
 # ADVO FIN : Laplacian Filter

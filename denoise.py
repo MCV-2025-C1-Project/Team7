@@ -67,17 +67,20 @@ def guided_like(bgr):
     sharp = cv2.addWeighted(den, 1.0, cv2.GaussianBlur(den, (0, 0), 1.0), -0.15, 0)
     return sharp
 
+
 def to_YCrCb(bgr):
     ycc = cv2.cvtColor(bgr, cv2.COLOR_BGR2YCrCb)
-    Y, Cr, Cb = ycc[:,:,0], ycc[:,:,1], ycc[:,:,2]
+    Y, Cr, Cb = ycc[:, :, 0], ycc[:, :, 1], ycc[:, :, 2]
     return Y.astype(np.uint8), Cr.astype(np.uint8), Cb.astype(np.uint8)
+
 
 def from_YCrCb(Y, Cr, Cb):
     ycc = cv2.merge([Y, Cr, Cb])
     return cv2.cvtColor(ycc, cv2.COLOR_YCrCb2BGR)
 
-def clamp01(x): return max(0.0, min(1.0, float(x)))
 
+def clamp01(x):
+    return max(0.0, min(1.0, float(x)))
 
 
 # ---------- 1) Escora totes les imatges i calcula mètriques ----------
@@ -161,19 +164,23 @@ def decide_and_denoise(bgr, metrics):
 
     sp, res, sig, hp = metrics["sp"], metrics["res"], metrics["sig"], metrics["hp"]
     reasons = []
-    if sp >= TH_SP:  reasons.append("SP")
-    if res >= TH_RES: reasons.append("RES")
-    if sig >= TH_SIG: reasons.append("SIG")
-    if hp >= TH_HP:  reasons.append("HP")
+    if sp >= TH_SP:
+        reasons.append("SP")
+    if res >= TH_RES:
+        reasons.append("RES")
+    if sig >= TH_SIG:
+        reasons.append("SIG")
+    if hp >= TH_HP:
+        reasons.append("HP")
 
     if not reasons:
         return bgr, "skip", sharp0, sharp0
 
     # Normalitza severitats [0,1] respecte als llindars ( >1 cap a 1 )
-    sev_sp  = clamp01(sp  / (TH_SP  * 1.8))
+    sev_sp = clamp01(sp / (TH_SP * 1.8))
     sev_res = clamp01(res / (TH_RES * 2.0))
     sev_sig = clamp01(sig / (TH_SIG * 2.0))
-    sev_hp  = clamp01(hp  / (TH_HP  * 2.0))
+    sev_hp = clamp01(hp / (TH_HP * 2.0))
 
     Y = Y0.copy()
     choice_parts = []
@@ -181,7 +188,11 @@ def decide_and_denoise(bgr, metrics):
     # --- Cas IMPULSOS (salt&pepper / residu) sobre Y ---
     if ("SP" in reasons) or ("RES" in reasons):
         # mida de mediana segons severitat
-        k = 3 if max(sev_sp, sev_res) < 0.35 else (5 if max(sev_sp, sev_res) < 0.7 else 7)
+        k = (
+            3
+            if max(sev_sp, sev_res) < 0.35
+            else (5 if max(sev_sp, sev_res) < 0.7 else 7)
+        )
         Y = cv2.medianBlur(Y, k)
         choice_parts.append(f"median {k}x{k}")
 
@@ -194,19 +205,27 @@ def decide_and_denoise(bgr, metrics):
 
         # suavitza soroll fi però preserva vores
         sC = int(10 + 30 * max(sev_sig, sev_hp))
-        sS = int(3 + 7  * max(sev_sig, sev_hp))
+        sS = int(3 + 7 * max(sev_sig, sev_hp))
         Y = cv2.bilateralFilter(Y, d=5, sigmaColor=sC, sigmaSpace=sS)
         choice_parts.append(f"+ bilateral(Y) sC{sC} sS{sS}")
 
     # --- Cas GAUSSIÀ/alta freq: NLM sobre Y + (opcional) bilateral color suau ---
-    if (("SIG" in reasons) or ("HP" in reasons)) and not (("SP" in reasons) or ("RES" in reasons)):
+    if (("SIG" in reasons) or ("HP" in reasons)) and not (
+        ("SP" in reasons) or ("RES" in reasons)
+    ):
         # força NLM segons severitat
-        sev = 0.6*sev_sig + 0.4*sev_hp
-        hY = 4 + int(18 * sev)        # 4..22
+        sev = 0.6 * sev_sig + 0.4 * sev_hp
+        hY = 4 + int(18 * sev)  # 4..22
         # NLM només en Y: implementació via BGR → convertim
         tmp = from_YCrCb(Y, Cr, Cb)
-        tmp = cv2.fastNlMeansDenoisingColored(tmp, None, h=hY, hColor= max(3, hY//2),
-                                              templateWindowSize=7, searchWindowSize=21)
+        tmp = cv2.fastNlMeansDenoisingColored(
+            tmp,
+            None,
+            h=hY,
+            hColor=max(3, hY // 2),
+            templateWindowSize=7,
+            searchWindowSize=21,
+        )
         Y = to_YCrCb(tmp)[0]
         choice_parts.append(f"NLM(Y) h{hY}")
 
@@ -223,7 +242,6 @@ def decide_and_denoise(bgr, metrics):
         return bgr, "reverted (oversmooth)", sharp0, sharp0
 
     return out, " | ".join(choice_parts), sharp0, sharp1
-
 
 
 # ---------- 4) Força TOP-N per assegurar exemples als plots ----------
@@ -323,7 +341,7 @@ def denoise_image(img: np.ndarray) -> np.ndarray:
         "hp": r["hp"],
     }
     out, choice, sharp0, sharp1 = decide_and_denoise(img, metrics)
-    did_filter = (choice != "skip") and ("reverted" not in choice)
+    # did_filter = (choice != "skip") and ("reverted" not in choice)
 
     """
     # Desa la imatge denoised si s'ha aplicat filtrat

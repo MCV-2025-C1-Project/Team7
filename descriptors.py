@@ -609,11 +609,11 @@ def glcm_block_descriptor_func(
 def compute_descriptors(
     suffix: str,
     method: Callable[[np.ndarray], np.ndarray],
-    images: dict[str, np.ndarray],
+    images: dict[str, list[np.ndarray]],
     use_grayscale: bool = True,
     save_as_pkl: bool = False,
     overwrite_pkl: bool = False,
-) -> dict[int, np.ndarray]:
+) -> dict[int, list[np.ndarray]]:
     """
     Compute descriptors for a list of image paths using the provided method. Loads from .pkl if available.
     If save_as_pkl is True, save the computed descriptors as .pkl files alongside the images.
@@ -641,11 +641,13 @@ def compute_descriptors(
         # for each image, compute the descriptor and store it in the dictionary
         for (
             imgname,
-            image,
+            imagelist,
         ) in images.items():  # tqdm.tqdm(images.items(), desc="Computing descriptors"):
-            descriptor = method(image)
             descriptor_index = int(imgname.split("_")[-1])
-            descriptors[descriptor_index] = descriptor
+            descriptors[descriptor_index] = []
+            for image in imagelist:
+                descriptor = method(image)
+                descriptors[descriptor_index].append(descriptor)
         if save_as_pkl:
             with open(pkl_path, "wb") as f:
                 pickle.dump(descriptors, f)
