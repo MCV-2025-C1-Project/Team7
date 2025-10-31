@@ -15,11 +15,17 @@ from similarity import (
     compute_histogram_intersection,
     compute_hellinger_distance,
 )
+from keypoints import (
+    harris_corner_detection,
+    harris_laplacian_detection,
+    dog_detection,
+    to_keypoints,
+    compute_local_descriptors
+)
 from segmentation import get_mask_and_crops, get_crops_from_gt_mask
 from retrieval import retrieval
 from preprocess import preprocess_images
 from metrics import mean_average_precision_K, binary_mask_evaluation
-from keypoints import harris_corner_detection, harris_laplacian_detection, dog_detection
 
 import pandas as pd
 import numpy as np
@@ -289,15 +295,33 @@ def best_of_each_week():
         img_path.stem: [cv2.imread(str(img_path))] for img_path in qst2_pathlist
     }
     
+    # WEEK 4 keypoint detection and local descriptor computation
     for name, img in qsd1_4_images.items():
         harris = copy.deepcopy(img[0])
         harris_lap = copy.deepcopy(img[0])
         dog = copy.deepcopy(img[0])
         
-        harris_corner_detection(harris)
-        harris_laplacian_detection(harris_lap)
-        dog_detection(dog)
+        points_harris = harris_corner_detection(harris)
+        kps_harris = to_keypoints(points_harris, size=3)
+        points_harris_lap = harris_laplacian_detection(harris_lap)
+        kps_harris_lap = to_keypoints(harris_laplacian_detection(harris_lap), size=3)
+        kps_dog = dog_detection(dog)
+        
+        kps, desc = compute_local_descriptors(img[0], kps_harris, method='SIFT')
 
+        print(f"{len(kps)} keypoints, descriptor shape = {desc.shape}")
+        
+        # Visualize
+        img_out = cv2.drawKeypoints(img[0], kps, None, flags=cv2.DRAW_MATCHES_FLAGS_DRAW_RICH_KEYPOINTS)
+        plt.imshow(cv2.cvtColor(img_out, cv2.COLOR_BGR2RGB))
+        plt.title("Harris + SIFT descriptors")
+        plt.axis("off")
+        plt.show()
+        
+        """
+        methods = ['SIFT', 'ORB', 'AKAZE']
+
+        """
     # WEEK 3 best segmentation method evaluation on qsd2_w3
     print("segmenting qsd2_w3...")
     qsd2_3_images = preprocess_images(qsd2_3_images, do_resize=False)

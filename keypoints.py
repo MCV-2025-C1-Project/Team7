@@ -12,9 +12,14 @@ def harris_corner_detection(img: np.ndarray) -> np.ndarray:
     img[dest > 0.01 * dest.max()] = [0, 0, 255]
     image_rgb = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
     
+    pts = np.argwhere(dest > 0.01 * dest.max())
+    keypoints = [(x, y) for y, x in pts] 
+    
     plt.imshow(image_rgb)
     plt.axis('off')  
     plt.show()
+    
+    return keypoints
     
 def harris_laplacian_detection(img: np.ndarray) -> np.ndarray: 
     operatedImage = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
@@ -66,3 +71,34 @@ def dog_detection(img: np.ndarray) -> np.ndarray:
     plt.show()
     
     return keypoints
+
+def to_keypoints(points, size=3):
+    kps = []
+    for p in points:
+        if len(p) == 4:
+            x, y, s, r = p
+            kp = cv2.KeyPoint(float(x), float(y), float(s))
+            kp.response = float(r)
+            kps.append(kp)
+        elif len(p) == 3:
+            x, y, s = p
+            kps.append(cv2.KeyPoint(float(x), float(y), float(s)))
+        else:
+            x, y = p
+            kps.append(cv2.KeyPoint(float(x), float(y), float(size)))
+    return kps
+
+def compute_local_descriptors(img: np.ndarray, keypoints: np.ndarray, method='SIFT'):
+
+    method = method.upper()
+    if method == 'SIFT':
+        extractor = cv2.SIFT_create()
+    elif method == 'ORB':
+        extractor = cv2.ORB_create()
+    elif method == 'AKAZE':
+        extractor = cv2.AKAZE_create()
+    else:
+        raise ValueError("Method must be one of: 'SIFT', 'ORB', 'AKAZE'")
+    
+    keypoints, descriptors = extractor.compute(img, keypoints)
+    return keypoints, descriptors
