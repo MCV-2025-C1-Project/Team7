@@ -19,6 +19,8 @@ from segmentation import get_mask_and_crops, get_crops_from_gt_mask
 from retrieval import retrieval
 from preprocess import preprocess_images
 from metrics import mean_average_precision_K, binary_mask_evaluation
+from keypoints import harris_corner_detection, harris_laplacian_detection, dog_detection
+
 import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
@@ -196,6 +198,7 @@ def best_of_each_week():
     week3_best_ncoefs = 30
     week3_best_grid = (3, 3)
 
+    # Query development datasets
     qsd1_pathlist = list(
         Path(Path(__file__).parent / "datasets" / "qsd1_w1").glob("*.jpg")
     )
@@ -203,32 +206,44 @@ def best_of_each_week():
         Path(Path(__file__).parent / "datasets" / "qsd2_w2").glob("*.jpg")
     )
     qsd1_3_pathlist = list(
-        Path(Path(__file__).parent / "datasets" / "qsd1_w3").glob(
-            "*.jpg"
-        )  #  / "non_augmented"
+        Path(Path(__file__).parent / "datasets" / "qsd1_w3").glob("*.jpg")
     )
     qsd2_3_pathlist = list(
         Path(Path(__file__).parent / "datasets" / "qsd2_w3").glob("*.jpg")
     )
     qsd2_3_no_aug_pathlist = list(
-        Path(Path(__file__).parent / "datasets" / "qsd2_w3" / "non_augmented").glob(
-            "*.jpg"
-        )
+        Path(Path(__file__).parent / "datasets" / "qsd2_w3" / "non_augmented").glob("*.jpg")
     )
     qsd2_3_masks_pathlist = list(
         Path(Path(__file__).parent / "datasets" / "qsd2_w3").glob("*.png")
     )
+    qsd1_4_pathlist = list(
+        Path(Path(__file__).parent / "datasets" / "qsd1_w4").glob("*.jpg")
+    )
+    qsd1_4_no_aug_pathlist = list(
+        Path(Path(__file__).parent / "datasets" / "qsd1_w4" / "non_augmented").glob("*.jpg")
+    )
+    qsd1_4_masks_pathlist = list(
+        Path(Path(__file__).parent / "datasets" / "qsd1_w4").glob("*.png")
+    )
+    
+    # Query test datasets
     qst1_pathlist = list(
         Path(Path(__file__).parent / "datasets" / "qst1_w3").glob("*.jpg")
     )
     qst2_pathlist = list(
         Path(Path(__file__).parent / "datasets" / "qst2_w3").glob("*.jpg")
     )
+    
+    # Dataset
     bbdd_pathlist = list(
         Path(Path(__file__).parent / "datasets" / "BBDD").glob("*.jpg")
     )
+    
+    # Ground Truths
     gt_qsd1_w3 = pickle.load(open("./datasets/qsd1_w3/gt_corresps.pkl", "rb"))
     gt_qsd2_w3 = pickle.load(open("./datasets/qsd2_w3/gt_corresps.pkl", "rb"))
+    gt_qsd1_w4 = pickle.load(open("./datasets/qsd1_w4/gt_corresps.pkl", "rb"))
 
     # 1.1) Load all images into a dictionary, key is the filename without extension and value is the image in bgr
     bbdd_images = {
@@ -250,16 +265,38 @@ def best_of_each_week():
         img_path.stem: [cv2.imread(str(img_path))]
         for img_path in qsd2_3_no_aug_pathlist
     }
+    qsd2_3_gt_masks = {
+        img_path.stem: [cv2.imread(str(img_path), cv2.IMREAD_GRAYSCALE)]
+        for img_path in qsd2_3_masks_pathlist
+    }
+    qsd1_4_images = {
+        img_path.stem: [cv2.imread(str(img_path))] for img_path in qsd1_4_pathlist
+    }
+    qsd1_4_no_aug_images = {
+        img_path.stem: [cv2.imread(str(img_path))]
+        for img_path in qsd1_4_no_aug_pathlist
+    }
+    qsd1_4_gt_masks = {
+        img_path.stem: [cv2.imread(str(img_path), cv2.IMREAD_GRAYSCALE)]
+        for img_path in qsd1_4_masks_pathlist
+    }
+    
+    # Test
     qst1_images = {
         img_path.stem: [cv2.imread(str(img_path))] for img_path in qst1_pathlist
     }
     qst2_images = {
         img_path.stem: [cv2.imread(str(img_path))] for img_path in qst2_pathlist
     }
-    qsd2_3_gt_masks = {
-        img_path.stem: [cv2.imread(str(img_path), cv2.IMREAD_GRAYSCALE)]
-        for img_path in qsd2_3_masks_pathlist
-    }
+    
+    for name, img in qsd1_4_images.items():
+        harris = copy.deepcopy(img[0])
+        harris_lap = copy.deepcopy(img[0])
+        dog = copy.deepcopy(img[0])
+        
+        harris_corner_detection(harris)
+        harris_laplacian_detection(harris_lap)
+        dog_detection(dog)
 
     # WEEK 3 best segmentation method evaluation on qsd2_w3
     print("segmenting qsd2_w3...")

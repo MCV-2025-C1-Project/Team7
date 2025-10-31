@@ -115,44 +115,8 @@ def pctl(arr, q):
     return float(np.percentile(arr, q)) if len(arr) else 0.0
 
 
-sp_arr = np.array([r["sp"] for r in rows])
-res_arr = np.array([r["res"] for r in rows])
-sig_arr = np.array([r["sig"] for r in rows])
-hp_arr = np.array([r["hp"] for r in rows])
-
-p90_sp, p90_res, p90_sig, p90_hp = (
-    pctl(sp_arr, 90),
-    pctl(res_arr, 90),
-    pctl(sig_arr, 90),
-    pctl(hp_arr, 90),
-)
-
-# Mínims absoluts “safety” (per si el lot és molt net)
-ABS_SP_MIN, ABS_RES_MIN, ABS_SIG_MIN, ABS_HP_MIN = 0.002, 0.010, 3.0, 1.5
-TH_SP = max(p90_sp, ABS_SP_MIN)
-TH_RES = max(p90_res, ABS_RES_MIN)
-TH_SIG = max(p90_sig, ABS_SIG_MIN)
-TH_HP = max(p90_hp, ABS_HP_MIN)
-
-# print(
-#    f"[INFO] Percentils p90 -> sp:{p90_sp:.4f}, res:{p90_res:.4f}, sig:{p90_sig:.2f}, hp:{p90_hp:.2f}"
-# )
-# print(
-#    f"[INFO] Llindars finals -> SP:{TH_SP:.4f} RES:{TH_RES:.4f} SIG:{TH_SIG:.2f} HP:{TH_HP:.2f}"
-# )
-
-# Desa CSV de mètriques
-with open(PLOTS / "noise_scores.csv", "w", newline="") as f:
-    w = csv.DictWriter(
-        f, fieldnames=["name", "sp", "res", "sig", "hp", "sharp", "path"]
-    )
-    w.writeheader()
-    w.writerows(rows)
-# print(f"[INFO] CSV -> {PLOTS / 'noise_scores.csv'}")
-
-
 # ---------- 3) Funció de decisió + denoise escalonat ----------
-def decide_and_denoise(bgr, metrics):
+def decide_and_denoise(bgr, metrics, th_sp, th_res, th_sig, th_hp):
     """
     Estratègia:
     - Filtra principalment la luminància (Y) i conserva Cr/Cb.
@@ -164,23 +128,23 @@ def decide_and_denoise(bgr, metrics):
 
     sp, res, sig, hp = metrics["sp"], metrics["res"], metrics["sig"], metrics["hp"]
     reasons = []
-    if sp >= TH_SP:
+    if sp >= th_sp:
         reasons.append("SP")
-    if res >= TH_RES:
+    if res >= th_res:
         reasons.append("RES")
-    if sig >= TH_SIG:
+    if sig >= th_sig:
         reasons.append("SIG")
-    if hp >= TH_HP:
+    if hp >= th_hp:
         reasons.append("HP")
 
     if not reasons:
         return bgr, "skip", sharp0, sharp0
 
     # Normalitza severitats [0,1] respecte als llindars ( >1 cap a 1 )
-    sev_sp = clamp01(sp / (TH_SP * 1.8))
-    sev_res = clamp01(res / (TH_RES * 2.0))
-    sev_sig = clamp01(sig / (TH_SIG * 2.0))
-    sev_hp = clamp01(hp / (TH_HP * 2.0))
+    sev_sp = clamp01(sp / (th_sp * 1.8))
+    sev_res = clamp01(res / (th_res * 2.0))
+    sev_sig = clamp01(sig / (th_sig * 2.0))
+    sev_hp = clamp01(hp / (th_hp * 2.0))
 
     Y = Y0.copy()
     choice_parts = []
@@ -198,7 +162,7 @@ def decide_and_denoise(bgr, metrics):
 
         # residu encara alt? una segona passada suau
         res_after = impulse_residue(Y)
-        if res_after > TH_RES:
+        if res_after > th_res:
             k2 = 3 if k == 3 else 5
             Y = cv2.medianBlur(Y, k2)
             choice_parts.append(f"+ median {k2}x{k2}")
@@ -249,48 +213,6 @@ def top_ids(arr, n):
     return np.argsort(-arr)[:n].tolist()
 
 
-force_idx = set(
-    top_ids(sp_arr, TOP_N_FORCE)
-    + top_ids(res_arr, TOP_N_FORCE)
-    + top_ids(sig_arr, TOP_N_FORCE)
-    + top_ids(hp_arr, TOP_N_FORCE)
-)
-
-# ---------- 5) Procés principal + plots ----------
-for i, (p, img, gray) in enumerate(imgs):
-    metrics = {
-        "sp": rows[i]["sp"],
-        "res": rows[i]["res"],
-        "sig": rows[i]["sig"],
-        "hp": rows[i]["hp"],
-    }
-    out, choice, sharp0, sharp1 = decide_and_denoise(img, metrics)
-    did_filter = (choice != "skip") and ("reverted" not in choice)
-
-    # Desa la imatge denoised si s'ha aplicat filtrat
-    if did_filter:
-        cv2.imwrite(str(OUTIMG / f"{p.stem}__{choice.replace(' ', '_')}.jpg"), out)
-
-    # Plota si s'ha filtrat O si és un dels forçats
-    if did_filter or (i in force_idx):
-        fig, ax = plt.subplots(1, 2, figsize=(10, 5))
-        ax[0].imshow(cv2.cvtColor(img, cv2.COLOR_BGR2RGB))
-        ax[0].axis("off")
-        ax[0].set_title(
-            f"{p.name}\nsp={metrics['sp']:.4f} res={metrics['res']:.4f}\nσweak={metrics['sig']:.2f} hp={metrics['hp']:.2f}"
-        )
-        ax[1].imshow(cv2.cvtColor(out, cv2.COLOR_BGR2RGB))
-        ax[1].axis("off")
-        ax[1].set_title(f"Denoised: {choice}\nsharp {sharp0:.1f}→{sharp1:.1f}")
-        plt.tight_layout()
-        plt.savefig(
-            PLOTS
-            / f"{p.stem}__{('FORCED_' if not did_filter else '')}{choice.replace(' ', '_')}.png",
-            dpi=DPI,
-        )
-        plt.close(fig)
-
-
 def denoise_image(img: np.ndarray) -> np.ndarray:
     # STEP 1: Escora totes les imatges i calcula mètriques
     gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
@@ -305,7 +227,7 @@ def denoise_image(img: np.ndarray) -> np.ndarray:
     # imgs.append((p, img, gray))
 
     # STEP 2: Llindars adaptatius per percentils (+mínims absoluts)
-    """
+    
     sp_arr = np.array(r["sp"])
     res_arr = np.array(r["res"])
     sig_arr = np.array(r["sig"])
@@ -332,7 +254,7 @@ def denoise_image(img: np.ndarray) -> np.ndarray:
         + top_ids(sig_arr, TOP_N_FORCE)
         + top_ids(hp_arr, TOP_N_FORCE)
     )
-    """
+    
     # ---------- 5) Procés principal + plots ----------
     metrics = {
         "sp": r["sp"],
@@ -340,7 +262,7 @@ def denoise_image(img: np.ndarray) -> np.ndarray:
         "sig": r["sig"],
         "hp": r["hp"],
     }
-    out, choice, sharp0, sharp1 = decide_and_denoise(img, metrics)
+    out, choice, sharp0, sharp1 = decide_and_denoise(img, metrics, TH_SP, TH_RES, TH_SIG, TH_HP)
     # did_filter = (choice != "skip") and ("reverted" not in choice)
 
     """
