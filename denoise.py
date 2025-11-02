@@ -1,18 +1,15 @@
-import csv
 import cv2
 import numpy as np
-from pathlib import Path
-import matplotlib.pyplot as plt
 
 # === CONFIG ===
-Q_DIR = Path("./datasets/qsd1_w3")
-OUTIMG = Path("./denoise_out")
-OUTIMG.mkdir(exist_ok=True, parents=True)
-PLOTS = Path("./denoise_plots")
-PLOTS.mkdir(exist_ok=True, parents=True)
-SFX = {".jpg", ".jpeg", ".png", ".bmp", ".tif", ".tiff"}
-TOP_N_FORCE = 4  # força plots dels TOP-N sospitosos per mètrica
-DPI = 220
+# Q_DIR = Path("./datasets/qsd1_w3")
+# OUTIMG = Path("./denoise_out")
+# OUTIMG.mkdir(exist_ok=True, parents=True)
+# PLOTS = Path("./denoise_plots")
+# PLOTS.mkdir(exist_ok=True, parents=True)
+# SFX = {".jpg", ".jpeg", ".png", ".bmp", ".tif", ".tiff"}
+# TOP_N_FORCE = 4  # força plots dels TOP-N sospitosos per mètrica
+# DPI = 220
 
 
 # ---------- Mètriques (robustes) ----------
@@ -84,25 +81,25 @@ def clamp01(x):
 
 
 # ---------- 1) Escora totes les imatges i calcula mètriques ----------
-rows, imgs = [], []
-for p in sorted(Q_DIR.glob("*")):
-    if p.suffix.lower() not in SFX:
-        continue
-    img = cv2.imread(str(p))
-    if img is None:
-        continue
-    gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
-    r = {
-        "name": p.name,
-        "sp": sp_ratio(gray),
-        "res": impulse_residue(gray),
-        "sig": sigma_on_weak_texture(gray),
-        "hp": hp_energy(gray),
-        "sharp": lap_var(gray),
-        "path": str(p),
-    }
-    rows.append(r)
-    imgs.append((p, img, gray))
+# rows, imgs = [], []
+# for p in sorted(Q_DIR.glob("*")):
+#     if p.suffix.lower() not in SFX:
+#         continue
+#     img = cv2.imread(str(p))
+#     if img is None:
+#         continue
+#     gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+#     r = {
+#         "name": p.name,
+#         "sp": sp_ratio(gray),
+#         "res": impulse_residue(gray),
+#         "sig": sigma_on_weak_texture(gray),
+#         "hp": hp_energy(gray),
+#         "sharp": lap_var(gray),
+#         "path": str(p),
+#     }
+#     rows.append(r)
+#     imgs.append((p, img, gray))
 
 # if not rows:
 #    print("[WARN] No s'han trobat imatges.")
@@ -228,10 +225,10 @@ def denoise_image(img: np.ndarray) -> np.ndarray:
 
     # STEP 2: Llindars adaptatius per percentils (+mínims absoluts)
     
-    sp_arr = np.array(r["sp"])
-    res_arr = np.array(r["res"])
-    sig_arr = np.array(r["sig"])
-    hp_arr = np.array(r["hp"])
+    sp_arr = np.array([r["sp"]])
+    res_arr = np.array([r["res"]])
+    sig_arr = np.array([r["sig"]])
+    hp_arr = np.array([r["hp"]])
 
     p90_sp, p90_res, p90_sig, p90_hp = (
         pctl(sp_arr, 90),
@@ -248,12 +245,12 @@ def denoise_image(img: np.ndarray) -> np.ndarray:
     TH_HP = max(p90_hp, ABS_HP_MIN)
 
     # STEP 4: Força TOP-N per assegurar exemples als plots
-    force_idx = set(
-        top_ids(sp_arr, TOP_N_FORCE)
-        + top_ids(res_arr, TOP_N_FORCE)
-        + top_ids(sig_arr, TOP_N_FORCE)
-        + top_ids(hp_arr, TOP_N_FORCE)
-    )
+    # force_idx = set(
+    #     top_ids(sp_arr, TOP_N_FORCE)
+    #     + top_ids(res_arr, TOP_N_FORCE)
+    #     + top_ids(sig_arr, TOP_N_FORCE)
+    #     + top_ids(hp_arr, TOP_N_FORCE)
+    # )
     
     # ---------- 5) Procés principal + plots ----------
     metrics = {
