@@ -15,7 +15,7 @@ from descriptors import (
     hsv_block_hist_concat_func,
     lbp_descriptor_histogram_func,
 )
-from keypoints import compute_local_descriptors, harris_corner_detection
+from keypoints import compute_local_descriptors, harris_corner_detection, calculate_matches
 from metrics import binary_mask_evaluation, mean_average_precision_K
 from preprocess import preprocess_images
 from retrieval import retrieval
@@ -27,7 +27,6 @@ from similarity import (
     compute_manhattan_distance,
     compute_x2_distance,
 )
-
 DISTANCE_FUNCTIONS = [
     compute_euclidean_distance,
     compute_manhattan_distance,
@@ -245,6 +244,12 @@ def best_of_each_week():
     gt_qsd1_w3 = pickle.load(open("./datasets/qsd1_w3/gt_corresps.pkl", "rb"))
     gt_qsd2_w3 = pickle.load(open("./datasets/qsd2_w3/gt_corresps.pkl", "rb"))
     gt_qsd1_w4 = pickle.load(open("./datasets/qsd1_w4/gt_corresps.pkl", "rb"))
+    
+    qsd1_w4_corresps_pathlist = []
+    for names in gt_qsd1_w4:
+        for name in names:
+            if name >= 0: 
+                qsd1_w4_corresps_pathlist.append(Path(Path(__file__).parent / "datasets" / "BBDD" / f"bbdd_{name:05d}.jpg"))
 
     # 1.1) Load all images into a dictionary, key is the filename without extension and value is the image in bgr
     bbdd_images = {
@@ -273,6 +278,9 @@ def best_of_each_week():
     qsd1_4_images = {
         img_path.stem: [cv2.imread(str(img_path))] for img_path in qsd1_4_pathlist
     }
+    qsd1_4_corresps_images = {
+        img_path.stem: [cv2.imread(str(img_path))] for img_path in qsd1_w4_corresps_pathlist
+    }
     qsd1_4_no_aug_images = {
         img_path.stem: [cv2.imread(str(img_path))]
         for img_path in qsd1_4_no_aug_pathlist
@@ -291,26 +299,46 @@ def best_of_each_week():
     }
     
     # WEEK 4 keypoint detection and local descriptor computation
-    for name, img in bbdd_images.items():
-        harris = copy.deepcopy(img[0])
-        harris_lap = copy.deepcopy(img[0])
-        dog = copy.deepcopy(img[0])
-        
-        kps_harris = harris_corner_detection(harris)
-        # kps_harris_lap = harris_laplacian_detection(harris_lap)
-        # kps_dog = dog_detection(dog)
-        
-        kps, desc = compute_local_descriptors(img[0], kps_harris, method='SIFT')
+    res = {}
+    max_matches = (0, "")
+    # De moment només he provat amb les correspondencies a la base de dades perque és gegant i és lent
+    for name, img in qsd1_4_corresps_images.items():
+        max_matches = (0, "")
+        for query_name, query_img in qsd1_4_images.items():   
+            harris_bbdd = copy.deepcopy(img[0])
+            harris_query = copy.deepcopy(query_img[0])
+            # harris_lap = copy.deepcopy(img[0])
+            # dog = copy.deepcopy(img[0])
+            
+            kps_harris_bbdd = harris_corner_detection(harris_bbdd)
+            kps_harris_query = harris_corner_detection(harris_query)
+            # kps_harris_lap = harris_laplacian_detection(harris_lap)
+            # kps_dog = dog_detection(dog)
+            
+            kps, desc1 = compute_local_descriptors(img[0], kps_harris_bbdd, method='SIFT')
+            kps, desc2 = compute_local_descriptors(query_img[0], kps_harris_query, method='SIFT')
+            
+            n_matches = calculate_matches(desc1, desc2)
+            
+            if (n_matches > max_matches[0]):
+                max_matches = (n_matches, query_name)
+    
+            # print(f"{len(kps)} keypoints, descriptor shape = {desc.shape}")
+            
+            # Visualize
+            # img_out = cv2.drawKeypoints(img[0], kps, None, flags=cv2.DRAW_MATCHES_FLAGS_DRAW_RICH_KEYPOINTS)
+            # plt.imshow(cv2.cvtColor(img_out, cv2.COLOR_BGR2RGB))
+            # plt.title("Harris + SIFT descriptors")
+            # plt.axis("off")
+            # plt.show()
 
-        print(f"{len(kps)} keypoints, descriptor shape = {desc.shape}")
+        # Guardo per cada query, la llista de max matches que troba
+        res.setdefault(max_matches[1], []).append((name, max_matches[0]))
+        print(f"Max matches of Query {max_matches[1]} -> {name}")
         
-        # Visualize
-        img_out = cv2.drawKeypoints(img[0], kps, None, flags=cv2.DRAW_MATCHES_FLAGS_DRAW_RICH_KEYPOINTS)
-        plt.imshow(cv2.cvtColor(img_out, cv2.COLOR_BGR2RGB))
-        plt.title("Harris + SIFT descriptors")
-        plt.axis("off")
-        plt.show()
-        
+    # Ordeno les llistes per nombre de matches
+    for query_name in res:
+        res[query_name].sort(key=lambda x: x[1], reverse=True)
         """
         methods = ['SIFT', 'ORB', 'AKAZE']
 

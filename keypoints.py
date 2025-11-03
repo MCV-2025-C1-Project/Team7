@@ -12,8 +12,14 @@ def harris_corner_detection(
     dest = cv2.cornerHarris(operatedImage, blockSize, ksize, 0.01)  # Try different parameter values
     dest = cv2.dilate(dest, None)
 
-    pts = np.argwhere(dest > 0.01 * dest.max())
-    keypoints = [(x, y) for y, x in pts]
+    dst_norm = cv2.normalize(dest, None, 0, 255, cv2.NORM_MINMAX)
+    responses = dst_norm.flatten()
+    coords = np.column_stack(np.unravel_index(np.argsort(responses)[::-1], dest.shape))
+    # Limit to top N points for faster matching. I guess play with this number
+    N = 2000
+    corners = coords[:N]
+    
+    keypoints = [(x, y) for y, x in corners]
 
     if visualize:
         img[dest > 0.01 * dest.max()] = [0, 0, 255]
@@ -124,10 +130,15 @@ def keypoint_descriptor_template(
     return compute_local_descriptors(img, keypoints, method=descriptor_method)
 
 
-def calculateMatches(desc1: np.ndarray, desc2: np.ndarray, method="BF") -> list[cv2.DMatch]:
+def calculate_matches(desc1: np.ndarray, desc2: np.ndarray, method="BF"):
+    # Binary descriptors are uint8
+    norm = cv2.NORM_L2
+    if desc1.dtype == np.uint8:
+        norm = cv2.NORM_HAMMING
+    
     method = method.upper()
     if method == "BF":
-        matcher = cv2.BFMatcher()
+        matcher = cv2.BFMatcher(norm, crossCheck=True)
     elif method == "FLANN":
         index_params = dict(algorithm=1, trees=5)
         search_params = dict(checks=50)
@@ -135,12 +146,18 @@ def calculateMatches(desc1: np.ndarray, desc2: np.ndarray, method="BF") -> list[
     else:
         raise ValueError("Method must be one of: 'BF', 'FLANN'")
 
-    matches = matcher.knnMatch(desc1, desc2, k=2)
-
+    # matches = matcher.knnMatch(desc1, desc2, k=2)
+    matches = []
+    if (desc1.shape[0] < desc2.shape[0]):
+        matches = matcher.match(desc2, desc1)
+    else:
+        matches = matcher.match(desc1, desc2)
+    return len(matches)
+    
     # Apply ratio test
     good_matches = []
     for m, n in matches:
         if m.distance < 0.75 * n.distance:
             good_matches.append(m)
 
-    return good_matches
+    return len(good_matches)
