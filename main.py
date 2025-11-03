@@ -1,37 +1,32 @@
-from pathlib import Path
+import copy
 import pickle
+from pathlib import Path
+
 import cv2
+import matplotlib.pyplot as plt
+import numpy as np
+import pandas as pd
+from skimage.metrics import structural_similarity as ssim_metric
+
 from descriptors import (
     compute_descriptors,
-    hsv_block_hist_concat_func,
-    lbp_descriptor_histogram_func,
     dct_block_descriptor_func,
     glcm_block_descriptor_func,
+    hsv_block_hist_concat_func,
+    lbp_descriptor_histogram_func,
 )
+from keypoints import compute_local_descriptors, harris_corner_detection
+from metrics import binary_mask_evaluation, mean_average_precision_K
+from preprocess import preprocess_images
+from retrieval import retrieval
+from segmentation import get_crops_from_gt_mask, get_mask_and_crops
 from similarity import (
     compute_euclidean_distance,
+    compute_hellinger_distance,
+    compute_histogram_intersection,
     compute_manhattan_distance,
     compute_x2_distance,
-    compute_histogram_intersection,
-    compute_hellinger_distance,
 )
-from keypoints import (
-    harris_corner_detection,
-    harris_laplacian_detection,
-    dog_detection,
-    to_keypoints,
-    compute_local_descriptors
-)
-from segmentation import get_mask_and_crops, get_crops_from_gt_mask
-from retrieval import retrieval
-from preprocess import preprocess_images
-from metrics import mean_average_precision_K, binary_mask_evaluation
-
-import pandas as pd
-import numpy as np
-import matplotlib.pyplot as plt
-import copy
-from skimage.metrics import structural_similarity as ssim_metric
 
 DISTANCE_FUNCTIONS = [
     compute_euclidean_distance,
@@ -296,16 +291,14 @@ def best_of_each_week():
     }
     
     # WEEK 4 keypoint detection and local descriptor computation
-    for name, img in qsd1_4_images.items():
+    for name, img in bbdd_images.items():
         harris = copy.deepcopy(img[0])
         harris_lap = copy.deepcopy(img[0])
         dog = copy.deepcopy(img[0])
         
-        points_harris = harris_corner_detection(harris)
-        kps_harris = to_keypoints(points_harris, size=3)
-        points_harris_lap = harris_laplacian_detection(harris_lap)
-        kps_harris_lap = to_keypoints(harris_laplacian_detection(harris_lap), size=3)
-        kps_dog = dog_detection(dog)
+        kps_harris = harris_corner_detection(harris)
+        # kps_harris_lap = harris_laplacian_detection(harris_lap)
+        # kps_dog = dog_detection(dog)
         
         kps, desc = compute_local_descriptors(img[0], kps_harris, method='SIFT')
 
