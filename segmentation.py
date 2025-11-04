@@ -1,13 +1,14 @@
-from filtering import (
-    segment_rgb_double_threshold,
-    erode_mask,
-    dilate_mask,
-    closing,
-    get_center_and_hollow_mask,
-    connected_components,
-)
 import cv2
 import numpy as np
+
+from filtering import (
+    closing,
+    connected_components,
+    dilate_mask,
+    erode_mask,
+    get_center_and_hollow_mask,
+    segment_rgb_double_threshold,
+)
 
 
 def compute_binary_mask_1(img: np.ndarray) -> np.ndarray:
@@ -20,9 +21,7 @@ def compute_binary_mask_1(img: np.ndarray) -> np.ndarray:
     """
 
     # --- Segmentación ---
-    mask = segment_rgb_double_threshold(
-        img, low_thresh=(50, 50, 50), high_thresh=(240, 240, 240)
-    )
+    mask = segment_rgb_double_threshold(img, low_thresh=(50, 50, 50), high_thresh=(240, 240, 240))
 
     # Invertir máscara si el fondo es blanco
     mask = 255 - mask
@@ -50,15 +49,11 @@ def compute_binary_mask_2(img: np.ndarray):
     border_pixels = img_lab[border_mask == 1]
     wall_lab = np.median(border_pixels, axis=0).astype(np.uint8)
 
-    delta_ab = np.sqrt(
-        (img_lab[:, :, 1] - wall_lab[1]) ** 2 + (img_lab[:, :, 2] - wall_lab[2]) ** 2
-    ).astype(np.float32)
+    delta_ab = np.sqrt((img_lab[:, :, 1] - wall_lab[1]) ** 2 + (img_lab[:, :, 2] - wall_lab[2]) ** 2).astype(np.float32)
 
     use_otsu = False
     if use_otsu:
-        dist_uint8 = cv2.normalize(delta_ab, None, 0, 255, cv2.NORM_MINMAX).astype(
-            np.uint8
-        )
+        dist_uint8 = cv2.normalize(delta_ab, None, 0, 255, cv2.NORM_MINMAX).astype(np.uint8)
         _, mask = cv2.threshold(dist_uint8, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
     else:
         T = 10.0  # manual threshold in Lab space units
@@ -111,9 +106,7 @@ def hybrid_mask_fft_color_lab(img_bgr):
     img_rgb = cv2.cvtColor(img_bgr, cv2.COLOR_BGR2RGB)
     gray = cv2.cvtColor(img_rgb, cv2.COLOR_RGB2GRAY)
     # 1) RGB
-    mask_rgb = segment_rgb_double_threshold(
-        img_rgb, low_thresh=(50, 50, 50), high_thresh=(240, 240, 240)
-    )
+    mask_rgb = segment_rgb_double_threshold(img_rgb, low_thresh=(50, 50, 50), high_thresh=(240, 240, 240))
     mask_rgb = cv2.morphologyEx(mask_rgb, cv2.MORPH_OPEN, np.ones((3, 3), np.uint8))
     mask_rgb = to_u8(mask_rgb)
 
@@ -152,9 +145,7 @@ def compute_mask_lab_otsu(img_bgr, open_ks=3, close_ks=5):
     border[:bw, :] = border[-bw:, :] = border[:, :bw] = border[:, -bw:] = 1
     wall_lab = np.median(img_lab[border == 1], axis=0).astype(np.uint8)
 
-    delta_ab = np.sqrt(
-        (img_lab[:, :, 1] - wall_lab[1]) ** 2 + (img_lab[:, :, 2] - wall_lab[2]) ** 2
-    ).astype(np.float32)
+    delta_ab = np.sqrt((img_lab[:, :, 1] - wall_lab[1]) ** 2 + (img_lab[:, :, 2] - wall_lab[2]) ** 2).astype(np.float32)
 
     dist = cv2.normalize(delta_ab, None, 0, 255, cv2.NORM_MINMAX).astype(np.uint8)
     _, mask = cv2.threshold(dist, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
@@ -273,7 +264,7 @@ def edges_to_region(edges, thresh=35, dilate_ks=5):
 
 
 def get_crops_from_gt_mask(
-    img_bgr: np.ndarray,
+    img_list: list[np.ndarray],
     mask_gt: np.ndarray,
     min_area: int = 2000,
     reject_border: bool = False,
@@ -297,6 +288,7 @@ def get_crops_from_gt_mask(
         List of cropped images (one per detected object)
     """
     # Ensure mask is binary (0/255)
+    img_bgr = img_list[0]
     mask_binary = (mask_gt > 127).astype(np.uint8) * 255
 
     # Find connected components

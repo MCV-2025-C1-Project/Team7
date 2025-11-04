@@ -22,6 +22,9 @@ If you don't wanna use uv, you can create a virtual environment using `python -m
 
 If you wanna use jupyter notebooks + uv, follow this [guide](https://docs.astral.sh/uv/guides/integration/jupyter/).
 
+# Final presentation slides link
+[Google slides](https://docs.google.com/presentation/d/1f8agfOgD5Dh7DknpkkDytMYeyzkoFgW1Wx0EWG7QX0I/edit?usp=sharing)
+
 ## How-to use this
 To run the main.py file using uv, you can use the following command:
 ```shell

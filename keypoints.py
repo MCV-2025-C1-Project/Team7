@@ -4,7 +4,7 @@ import numpy as np
 
 
 def harris_corner_detection(
-    img: np.ndarray, blockSize: int = 17, ksize: int = 21, visualize: bool = False
+    img: np.ndarray, blockSize: int = 17, ksize: int = 21, N: int = 2000, visualize: bool = False
 ) -> list[cv2.KeyPoint]:
     operatedImage = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
     operatedImage = np.float32(operatedImage)
@@ -16,9 +16,8 @@ def harris_corner_detection(
     responses = dst_norm.flatten()
     coords = np.column_stack(np.unravel_index(np.argsort(responses)[::-1], dest.shape))
     # Limit to top N points for faster matching. I guess play with this number
-    N = 2000
     corners = coords[:N]
-    
+
     keypoints = [(x, y) for y, x in corners]
 
     if visualize:
@@ -130,12 +129,12 @@ def keypoint_descriptor_template(
     return compute_local_descriptors(img, keypoints, method=descriptor_method)
 
 
-def calculate_matches(desc1: np.ndarray, desc2: np.ndarray, method="BF"):
+def calculate_matches(desc1: np.ndarray, desc2: np.ndarray, method="BF") -> tuple[int, list[cv2.DMatch]]:
     # Binary descriptors are uint8
     norm = cv2.NORM_L2
     if desc1.dtype == np.uint8:
         norm = cv2.NORM_HAMMING
-    
+
     method = method.upper()
     if method == "BF":
         matcher = cv2.BFMatcher(norm, crossCheck=True)
@@ -148,12 +147,12 @@ def calculate_matches(desc1: np.ndarray, desc2: np.ndarray, method="BF"):
 
     # matches = matcher.knnMatch(desc1, desc2, k=2)
     matches = []
-    if (desc1.shape[0] < desc2.shape[0]):
+    if desc1.shape[0] < desc2.shape[0]:
         matches = matcher.match(desc2, desc1)
     else:
         matches = matcher.match(desc1, desc2)
-    return len(matches)
-    
+    return len(matches), matches
+
     # Apply ratio test
     good_matches = []
     for m, n in matches:
@@ -161,3 +160,77 @@ def calculate_matches(desc1: np.ndarray, desc2: np.ndarray, method="BF"):
             good_matches.append(m)
 
     return len(good_matches)
+
+
+def keypoint_retrieval(
+    bbdd_images: dict[str, list[np.ndarray]],
+    query_images: dict[str, list[np.ndarray]],
+    keypoint_func,
+    descriptor_method: str = "SIFT",
+    matcher_method: str = "BF",
+    top_k: int = 10,
+) -> dict[int, list[list[tuple[int, int]]]]:
+    """
+    Perform image retrieval using keypoint matching.
+
+    Args:
+        bbdd_images: Database images dictionary {name: [image]}
+        query_images: Query images dictionary {name: [image1, image2, ...]}
+        keypoint_func: Function to detect keypoints (e.g., harris_corner_detection)
+        descriptor_method: Local descriptor method ('SIFT', 'ORB', 'AKAZE')
+        matcher_method: Matching method ('BF', 'FLANN')
+        top_k: Number of top matches to return
+
+    Returns:
+        Dictionary mapping query index to list of lists of (n_matches, bbdd_index) tuples
+    """
+    # Create index mappings
+    bbdd_trans = {int(k.split("_")[-1]): k for k in bbdd_images.keys()}
+    bbdd_trans_inv = {v: k for k, v in bbdd_trans.items()}
+    query_trans = {int(k): k for k in query_images.keys()}
+    query_trans_inv = {v: k for k, v in query_trans.items()}
+
+    # Compute keypoints and descriptors for all BBDD images
+    print("Computing BBDD keypoints and descriptors...")
+    bbdd_descriptors = {}
+    bbdd_keypoints = {}
+    for name, img_list in bbdd_images.items():
+        img = img_list[0]
+        kps = keypoint_func(img.copy(), visualize=False)
+        _, desc = compute_local_descriptors(img, kps, method=descriptor_method)
+        bbdd_descriptors[name] = desc
+        bbdd_keypoints[name] = kps
+
+    # Compute keypoints and descriptors for all query images
+    print("Computing query keypoints and descriptors...")
+    query_descriptors = {}
+    query_keypoints = {}
+    for name, img_list in query_images.items():
+        query_descriptors[name] = []
+        query_keypoints[name] = []
+        for img in img_list:
+            kps = keypoint_func(img.copy(), visualize=False)
+            _, desc = compute_local_descriptors(img, kps, method=descriptor_method)
+            query_descriptors[name].append(desc)
+            query_keypoints[name].append(kps)
+
+    # Perform matching and retrieval
+    print("Performing matching and retrieval...")
+    results = {}
+    for query_name, query_desc_list in query_descriptors.items():
+        query_idx = query_trans_inv[query_name]
+        results[query_idx] = []
+
+        for query_desc in query_desc_list:
+            matches_list = []
+
+            for bbdd_name, bbdd_desc in bbdd_descriptors.items():
+                bbdd_idx = bbdd_trans_inv[bbdd_name]
+                n_matches, _ = calculate_matches(query_desc, bbdd_desc, method=matcher_method)
+                matches_list.append((n_matches, bbdd_idx))
+
+            # Sort by number of matches (descending) and take top_k
+            matches_list.sort(key=lambda x: x[0], reverse=True)
+            results[query_idx].append(matches_list[:top_k])
+
+    return results
