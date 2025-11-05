@@ -273,10 +273,10 @@ def get_crops_from_gt_mask(
     padding: int = 10,
 ) -> list[np.ndarray]:
     """
-    Generates crops from a ground truth mask.
+    Generates crops from a ground truth mask (optimized with OpenCV).
 
     Args:
-        img_bgr: Input image in BGR format
+        img_list: List containing the input image in BGR format
         mask_gt: Ground truth mask (grayscale, 0=background, 255=object)
         min_area: Minimum area for a component to be kept
         reject_border: Whether to reject components touching the border
@@ -285,43 +285,57 @@ def get_crops_from_gt_mask(
         padding: Extra padding for crops
 
     Returns:
-        List of cropped images (one per detected object)
+        List of cropped images sorted by x-coordinate (left to right)
     """
-    # Ensure mask is binary (0/255)
     img_bgr = img_list[0]
+    H, W = img_bgr.shape[:2]
+
+    # Ensure mask is binary (0/255)
     mask_binary = (mask_gt > 127).astype(np.uint8) * 255
 
-    # Find connected components
-    comps = connected_components(
-        mask_binary,
-        min_area=min_area,
-        reject_border=reject_border,
-        border_margin=border_margin,
-        outermost_only=outermost_only,
+    # Use OpenCV's connected components with stats (much faster)
+    num_labels, labels, stats, centroids = cv2.connectedComponentsWithStats(
+        mask_binary, connectivity=8, ltype=cv2.CV_32S
     )
 
-    # Generate crops
-    H, W = mask_binary.shape
-    crops_img, bboxes = [], []
+    # Collect valid components
+    valid_crops = []
 
-    for comp in comps:
-        x1, y1, x2, y2 = comp["bbox"]
+    # Start from 1 to skip background (label 0)
+    for label_id in range(1, num_labels):
+        # Get component statistics
+        x, y, w, h, area = stats[label_id]
+
+        # Filter by minimum area
+        if area < min_area:
+            continue
+
+        # Check if touching border
+        if reject_border:
+            if x <= border_margin or y <= border_margin or x + w >= W - border_margin or y + h >= H - border_margin:
+                continue
 
         # Apply padding and clamp to image boundaries
-        x1p = max(0, x1 - padding)
-        y1p = max(0, y1 - padding)
-        x2p = min(W - 1, x2 + padding)
-        y2p = min(H - 1, y2 + padding)
+        x1p = max(0, x - padding)
+        y1p = max(0, y - padding)
+        x2p = min(W - 1, x + w + padding)
+        y2p = min(H - 1, y + h + padding)
 
+        # Extract crop
         crop_img = img_bgr[y1p : y2p + 1, x1p : x2p + 1]
-        crops_img.append(crop_img)
-        bboxes.append((x1p, y1p, x2p, y2p))
+
+        if W > H:
+            valid_crops.append((x1p, crop_img))
+        else:
+            valid_crops.append((y1p, crop_img))
+
+    valid_crops.sort(key=lambda item: (item[0]))
+
+    # Extract only the crops, limit to 2 if needed
+    crops_img = [crop for _, crop in valid_crops]
+
     if len(crops_img) > 2:
         crops_img = crops_img[:2]
-        bboxes = bboxes[:2]
-    decorated = [[bbox[0], crop] for bbox, crop in zip(bboxes, crops_img)]
-    decorated.sort(key=lambda x: x[0])
-    crops_img = [crop for _, crop in decorated]
 
     return crops_img
 
