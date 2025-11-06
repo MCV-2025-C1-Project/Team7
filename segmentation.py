@@ -4,6 +4,7 @@ import numpy as np
 from filtering import (
     closing,
     connected_components,
+    connected_components_cv2,
     dilate_mask,
     erode_mask,
     get_center_and_hollow_mask,
@@ -340,36 +341,117 @@ def get_crops_from_gt_mask(
     return crops_img
 
 
+# def get_mask_and_crops(
+#     img_list: list[np.ndarray],
+#     use_mask: str = "mask_lab",  # "mask_lab", "refined", "combined", etc.
+#     min_area: int = 2000,
+#     reject_border: bool = True,
+#     border_margin: int = 2,
+#     outermost_only: bool = True,
+#     padding: int = 0,  # padding extra para los recortes
+# ):
+#     """
+#     Devuelve máscara seleccionada y recortes por componente.
+#     Returns:
+#     {
+#     "mask": np.ndarray (0/255),
+#     "components": List[dict],
+#     "crops_img": List[np.ndarray],
+#     "crops_mask": List[np.ndarray],
+#     "bboxes": List[tuple],
+#     "vis": np.ndarray (RGB con detecciones dibujadas)
+#     }
+#     """
+#     img_bgr = img_list[0]
+#     # Generar máscaras
+#     masks = hybrid_mask_fft_color_lab(img_bgr)
+#     if use_mask not in masks:
+#         raise KeyError(f"use_mask '{use_mask}' no está en {list(masks.keys())}")
+#     mask_sel = masks[use_mask]
+
+#     # Componentes
+#     comps = connected_components_cv2(
+#         mask_sel,
+#         min_area=min_area,
+#         reject_border=reject_border,
+#         border_margin=border_margin,
+#         outermost_only=outermost_only,
+#     )
+
+#     # Recortes
+#     H, W = mask_sel.shape
+#     crops_img, crops_mask, bboxes = [], [], []
+#     for comp in comps:
+#         x1, y1, x2, y2 = comp["bbox"]
+
+#         # aplicar padding y acotar
+#         x1p = max(0, x1 - padding)
+#         y1p = max(0, y1 - padding)
+#         x2p = min(W - 1, x2 + padding)
+#         y2p = min(H - 1, y2 + padding)
+
+#         crop_img = img_bgr[y1p : y2p + 1, x1p : x2p + 1]
+#         crop_mask = mask_sel[y1p : y2p + 1, x1p : x2p + 1]
+
+#         crops_img.append(crop_img)
+#         crops_mask.append(crop_mask)
+#         bboxes.append((x1p, y1p, x2p, y2p))
+#     if len(crops_img) > 2:
+#         crops_img = crops_img[:2]
+#         crops_mask = crops_mask[:2]
+#         bboxes = bboxes[:2]
+#         decorated = [[int(bbox[0]), crop] for bbox, crop in zip(bboxes, crops_img)]
+#         decorated.sort(key=lambda x: x[0])
+#         crops_img = [crop for _, crop in decorated]
+
+#     # Visualización
+#     vis = cv2.cvtColor(img_bgr, cv2.COLOR_BGR2RGB).copy()
+#     for i, (x1, y1, x2, y2) in enumerate(bboxes):
+#         cv2.rectangle(vis, (x1, y1), (x2, y2), (0, 255, 0), 2)
+#         cv2.putText(
+#             vis,
+#             f"#{i + 1}",
+#             (x1, max(0, y1 - 10)),
+#             cv2.FONT_HERSHEY_SIMPLEX,
+#             0.6,
+#             (0, 255, 0),
+#             2,
+#         )
+
+#     return {
+#         "mask": mask_sel,
+#         "components": comps,
+#         "crops_img": crops_img,
+#         "crops_mask": crops_mask,
+#         "bboxes": bboxes,
+#         "vis": vis,
+#     }
+
+
 def get_mask_and_crops(
     img_list: list[np.ndarray],
-    use_mask: str = "mask_lab",  # "mask_lab", "refined", "combined", etc.
+    use_mask: str = "mask_lab",
     min_area: int = 2000,
     reject_border: bool = True,
     border_margin: int = 2,
     outermost_only: bool = True,
-    padding: int = 0,  # padding extra para los recortes
 ):
     """
-    Devuelve máscara seleccionada y recortes por componente.
-    Returns:
-    {
-    "mask": np.ndarray (0/255),
-    "components": List[dict],
-    "crops_img": List[np.ndarray],
-    "crops_mask": List[np.ndarray],
-    "bboxes": List[tuple],
-    "vis": np.ndarray (RGB con detecciones dibujadas)
-    }
+    Versión mejorada: intenta approximar el contorno a un cuadrilátero (p. ej. trapecio)
+    usando convexHull + approxPolyDP con búsqueda de epsilon. Si falla, hace fallback
+    a minAreaRect.
     """
+
     img_bgr = img_list[0]
-    # Generar máscaras
+
+    # Obtener máscaras
     masks = hybrid_mask_fft_color_lab(img_bgr)
     if use_mask not in masks:
         raise KeyError(f"use_mask '{use_mask}' no está en {list(masks.keys())}")
-    mask_sel = masks[use_mask]
+    mask_sel = masks[use_mask].astype(np.uint8)
 
-    # Componentes
-    comps = connected_components(
+    # Componentes conectados
+    comps = connected_components_cv2(
         mask_sel,
         min_area=min_area,
         reject_border=reject_border,
@@ -377,51 +459,217 @@ def get_mask_and_crops(
         outermost_only=outermost_only,
     )
 
-    # Recortes
     H, W = mask_sel.shape
     crops_img, crops_mask, bboxes = [], [], []
+
+    # Nueva máscara para rellenar los cuadriláteros mínimos
+    refined_mask = np.zeros_like(mask_sel, dtype=np.uint8)
+
     for comp in comps:
         x1, y1, x2, y2 = comp["bbox"]
 
-        # aplicar padding y acotar
-        x1p = max(0, x1 - padding)
-        y1p = max(0, y1 - padding)
-        x2p = min(W - 1, x2 + padding)
-        y2p = min(H - 1, y2 + padding)
+        # Recorte sin padding
+        comp_mask = mask_sel[y1 : y2 + 1, x1 : x2 + 1]
+        if np.count_nonzero(comp_mask) == 0:
+            continue
 
-        crop_img = img_bgr[y1p : y2p + 1, x1p : x2p + 1]
-        crop_mask = mask_sel[y1p : y2p + 1, x1p : x2p + 1]
+        # findContours espera una imagen binaria; damos la máscara relativa al bbox
+        contours, _ = cv2.findContours(comp_mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+        if not contours:
+            continue
+
+        # Elegimos el contorno más grande (por área)
+        contour = max(contours, key=cv2.contourArea)
+
+        # 1) Intentar con convexHull (el hull suaviza concavidades)
+        hull = cv2.convexHull(contour)
+
+        # 2) perímetro para guiar epsilon
+        perim = cv2.arcLength(hull, True)
+
+        # 3) búsqueda iterativa de epsilon para approxPolyDP intentando obtener 4 vértices
+        found_quad = None
+        # rango de eps: 0.5% .. 20% del perímetro, paso 0.5% (ajustable)
+        eps_start = 0.005 * perim
+        eps_end = 0.20 * perim
+        eps_step = 0.005 * perim
+        eps = eps_start
+        while eps <= eps_end:
+            approx = cv2.approxPolyDP(hull, eps, True)
+            if approx is not None and len(approx) == 4:
+                found_quad = approx
+                break
+            eps += eps_step
+
+        # 4) si no hay resultado con hull, probar directamente sobre el contorno
+        if found_quad is None:
+            eps = eps_start
+            while eps <= eps_end:
+                approx = cv2.approxPolyDP(contour, eps, True)
+                if approx is not None and len(approx) == 4:
+                    found_quad = approx
+                    break
+                eps += eps_step
+
+        # 5) fallback: si aún no hay quad, usar minAreaRect (rectángulo rotado)
+        if found_quad is None:
+            rect = cv2.minAreaRect(contour)
+            box = cv2.boxPoints(rect)  # 4 puntos del rectángulo rotado
+            box = np.int32(box)
+        else:
+            # approx viene en coordenadas relativas al recorte; reestructurar
+            box = found_quad.reshape(4, 2).astype(np.int32)
+
+        # Ajustar coordenadas al sistema original (sumar offset del bbox)
+        box[:, 0] += x1
+        box[:, 1] += y1
+
+        # Dibujar el cuadrilátero en la nueva máscara
+        cv2.fillPoly(refined_mask, [box], 255)
+
+        # Guardar recorte original (sin padding)
+        crop_img = img_bgr[y1 : y2 + 1, x1 : x2 + 1]
+        crop_mask = mask_sel[y1 : y2 + 1, x1 : x2 + 1]
 
         crops_img.append(crop_img)
         crops_mask.append(crop_mask)
-        bboxes.append((x1p, y1p, x2p, y2p))
-    if len(crops_img) > 2:
-        crops_img = crops_img[:2]
-        crops_mask = crops_mask[:2]
-        bboxes = bboxes[:2]
-        decorated = [[int(bbox[0]), crop] for bbox, crop in zip(bboxes, crops_img)]
-        decorated.sort(key=lambda x: x[0])
-        crops_img = [crop for _, crop in decorated]
+        bboxes.append((x1, y1, x2, y2))
 
     # Visualización
     vis = cv2.cvtColor(img_bgr, cv2.COLOR_BGR2RGB).copy()
     for i, (x1, y1, x2, y2) in enumerate(bboxes):
         cv2.rectangle(vis, (x1, y1), (x2, y2), (0, 255, 0), 2)
-        cv2.putText(
-            vis,
-            f"#{i + 1}",
-            (x1, max(0, y1 - 10)),
-            cv2.FONT_HERSHEY_SIMPLEX,
-            0.6,
-            (0, 255, 0),
-            2,
-        )
+        cv2.putText(vis, f"#{i+1}", (x1, max(0, y1-10)),
+                    cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0,255,0), 2)
 
     return {
-        "mask": mask_sel,
+        "mask": refined_mask,  # Nueva máscara con cuadriláteros/trapecios mínimos
         "components": comps,
         "crops_img": crops_img,
         "crops_mask": crops_mask,
         "bboxes": bboxes,
         "vis": vis,
+    }
+
+
+import cv2
+import numpy as np
+
+def get_mask_and_crops_refined(
+    img_list: list[np.ndarray],
+    use_mask: str = "mask_lab",
+    min_area: int = 2000,
+    reject_border: bool = True,
+    border_margin: int = 2,
+    outermost_only: bool = True,
+):
+    """
+    Versión mejorada: detecta cuadriláteros (incluyendo trapecios) y recalcula
+    todos los componentes, crops, bboxes y visualización basados en las nuevas máscaras.
+    """
+
+    img_bgr = img_list[0]
+
+    # Obtener máscaras originales
+    masks = hybrid_mask_fft_color_lab(img_bgr)
+    if use_mask not in masks:
+        raise KeyError(f"use_mask '{use_mask}' no está en {list(masks.keys())}")
+    mask_sel = masks[use_mask].astype(np.uint8)
+
+    # Obtener componentes iniciales (para recortar)
+    comps = connected_components_cv2(
+        mask_sel,
+        min_area=min_area,
+        reject_border=reject_border,
+        border_margin=border_margin,
+        outermost_only=outermost_only,
+    )
+
+    # Máscara refinada donde dibujaremos cuadriláteros
+    refined_mask = np.zeros_like(mask_sel, dtype=np.uint8)
+
+    for comp in comps:
+        x1, y1, x2, y2 = comp["bbox"]
+
+        comp_mask = mask_sel[y1 : y2 + 1, x1 : x2 + 1]
+        if np.count_nonzero(comp_mask) == 0:
+            continue
+
+        contours, _ = cv2.findContours(comp_mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+        if not contours:
+            continue
+
+        contour = max(contours, key=cv2.contourArea)
+
+        # --- 1️⃣ Buscar cuadrilátero (trapecio) ---
+        hull = cv2.convexHull(contour)
+        perim = cv2.arcLength(hull, True)
+
+        found_quad = None
+        eps_start, eps_end, eps_step = 0.005 * perim, 0.20 * perim, 0.005 * perim
+        eps = eps_start
+
+        while eps <= eps_end:
+            approx = cv2.approxPolyDP(hull, eps, True)
+            if approx is not None and len(approx) == 4:
+                found_quad = approx
+                break
+            eps += eps_step
+
+        if found_quad is None:
+            eps = eps_start
+            while eps <= eps_end:
+                approx = cv2.approxPolyDP(contour, eps, True)
+                if approx is not None and len(approx) == 4:
+                    found_quad = approx
+                    break
+                eps += eps_step
+
+        if found_quad is None:
+            rect = cv2.minAreaRect(contour)
+            box = cv2.boxPoints(rect)
+            box = np.int32(box)
+        else:
+            box = found_quad.reshape(4, 2).astype(np.int32)
+
+        # --- 2️⃣ Ajustar coordenadas y dibujar en la máscara global ---
+        box[:, 0] += x1
+        box[:, 1] += y1
+        cv2.fillPoly(refined_mask, [box], 255)
+
+    # --- 3️⃣ Recalcular componentes sobre la máscara refinada ---
+    refined_comps = connected_components_cv2(
+        refined_mask,
+        min_area=min_area,
+        reject_border=reject_border,
+        border_margin=border_margin,
+        outermost_only=outermost_only,
+    )
+
+    # --- 4️⃣ Generar crops, máscaras y bboxes basadas en la nueva máscara ---
+    crops_img, crops_mask, bboxes = [], [], []
+    for comp in refined_comps:
+        x1, y1, x2, y2 = comp["bbox"]
+
+        crop_img = img_bgr[y1:y2+1, x1:x2+1]
+        crop_mask = refined_mask[y1:y2+1, x1:x2+1]
+
+        crops_img.append(crop_img)
+        crops_mask.append(crop_mask)
+        bboxes.append((x1, y1, x2, y2))
+
+    # --- 5️⃣ Visualización final basada en componentes refinados ---
+    vis = cv2.cvtColor(img_bgr, cv2.COLOR_BGR2RGB).copy()
+    for i, (x1, y1, x2, y2) in enumerate(bboxes):
+        cv2.rectangle(vis, (x1, y1), (x2, y2), (0, 255, 0), 2)
+        cv2.putText(vis, f"#{i+1}", (x1, max(0, y1-10)),
+                    cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0,255,0), 2)
+
+    return {
+        "mask": refined_mask,          # Nueva máscara con cuadriláteros/trapecios
+        "components": refined_comps,   # Componentes recalculados
+        "crops_img": crops_img,        # Imágenes recortadas nuevas
+        "crops_mask": crops_mask,      # Máscaras recortadas nuevas
+        "bboxes": bboxes,              # Bboxes recalculadas
+        "vis": vis,                    # Visualización final
     }

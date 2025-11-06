@@ -1,6 +1,6 @@
 from typing import Callable
 import numpy as np
-
+import cv2
 
 def mean_filter(img: np.ndarray, kernel_size: int = 3) -> np.ndarray:
     """
@@ -338,6 +338,82 @@ def connected_components(mask, min_area=500, connectivity=8):
 """
 
 
+def connected_components_cv2(
+    mask,
+    min_area=500,
+    connectivity=8,
+    reject_border=True,
+    border_margin=0,
+    outermost_only=True,
+):
+    """
+    Detecta componentes conectados en una máscara binaria (0/255) usando OpenCV.
+    Devuelve una lista de componentes con bbox, centro y área.
+    """
+    mask = (mask > 0).astype(np.uint8)
+    H, W = mask.shape
+
+    # Obtener etiquetas y estadísticas
+    num_labels, labels, stats, centroids = cv2.connectedComponentsWithStats(mask, connectivity)
+
+    components = []
+    for i in range(1, num_labels):  # ignorar fondo (label 0)
+        x, y, w, h, area = stats[i]
+
+        if area < min_area:
+            continue
+
+        x_min, y_min, x_max, y_max = x, y, x + w - 1, y + h - 1
+
+        # Descartar si toca el borde
+        if reject_border:
+            if (
+                x_min <= border_margin
+                or y_min <= border_margin
+                or x_max >= W - 1 - border_margin
+                or y_max >= H - 1 - border_margin
+            ):
+                continue
+
+        cx, cy = centroids[i]
+        components.append(
+            {
+                "bbox": (x_min, y_min, x_max, y_max),
+                "center": (int(cx), int(cy)),
+                "area": int(area),
+            }
+        )
+
+    # Eliminar componentes contenidos dentro de otros (outermost_only)
+    if outermost_only and components:
+        keep = [True] * len(components)
+
+        def contained(bi, bj, tol=0):
+            xi1, yi1, xi2, yi2 = bi
+            xj1, yj1, xj2, yj2 = bj
+            return (
+                xi1 >= xj1 + tol
+                and yi1 >= yj1 + tol
+                and xi2 <= xj2 - tol
+                and yi2 <= yj2 - tol
+            )
+
+        for i in range(len(components)):
+            if not keep[i]:
+                continue
+            bi = components[i]["bbox"]
+            for j in range(len(components)):
+                if i == j or not keep[j]:
+                    continue
+                bj = components[j]["bbox"]
+                if contained(bi, bj, tol=1):
+                    keep[i] = False
+                    break
+
+        components = [c for k, c in enumerate(components) if keep[k]]
+
+    components.sort(key=lambda c: c["area"], reverse=True)
+    return components
 def connected_components(
     mask,
     min_area=500,
@@ -456,6 +532,7 @@ def connected_components(
         components = [c for k, c in enumerate(components) if keep[k]]
     components.sort(key=lambda c: c["area"], reverse=True)
     return components
+
 
 
 # ADVO FIN : Laplacian Filter
