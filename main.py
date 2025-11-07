@@ -579,10 +579,10 @@ def test_weekn_weekm(weekn: int = 4, weekm: int = 4):
     harris_lap_params = {'blockSize':5,'ksize':3,'k':0.04,'threshold':0.02,'nms_radius':6,'scales':[1.6,3.2,6.4],'max_kps':2000}
 
     combinations = [
-        #("harris", harris_corner_detection_func(**harris_params), "ORB", "BF"),
-        #("harris", harris_corner_detection_func(**harris_params), "SIFT", "BF"),
-        #("dog", dog_detection, "SIFT", "BF"),
-        #("orb", orb_detection, "ORB", "BF"),
+        ("harris", harris_corner_detection_func(**harris_params), "ORB", "BF"),
+        ("harris", harris_corner_detection_func(**harris_params), "SIFT", "BF"),
+        ("dog", dog_detection, "SIFT", "BF"),
+        ("orb", orb_detection, "ORB", "BF"),
         ("harris_laplacian", harris_laplacian_detection_func(**harris_lap_params), "COLOR-SIFT", "BF"),
     ]
 
