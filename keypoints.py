@@ -92,51 +92,132 @@ def harris_corner_detection_func(
 
     return custom_harris_corner_detection
 
+def harris_laplacian_detection_func(
+    blockSize: int = 3,
+    ksize: int = 3,
+    k: float = 0.06,
+    threshold: float = 0.001,
+    nms_radius: int = 3,
+    max_kps: int = 2000,
+    visualize: bool = False,
+    **params
+) -> Callable[[np.ndarray], list[cv2.KeyPoint]]:
+    def custom_harris_laplacian_detection(img: np.ndarray) -> list[cv2.KeyPoint]:
+        return harris_laplacian_detection(
+            img,
+            blockSize=blockSize,
+            ksize=ksize,
+            k=k,
+            threshold=threshold,
+            nms_radius=nms_radius,
+            visualize=visualize,
+            **params
+        )
 
-def harris_laplacian_detection(img: np.ndarray, visualize: bool = False) -> list[cv2.KeyPoint]:
-    operatedImage = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
-    scales = [1.2, 2, 4, 8, 12, 16, 20]
-    k = 0.04
-    keypoints = []
+    return custom_harris_laplacian_detection
+
+def harris_laplacian_detection(
+    img: np.ndarray,
+    blockSize: int = 3,
+    ksize: int = 3,
+    k: float = 0.06,
+    threshold: float = 0.001,
+    nms_radius: int = 3,
+    max_kps: int = 2000,
+    visualize: bool = False,
+    **params
+
+) -> list[cv2.KeyPoint]:
+    """
+    Harris–Laplacian keypoint detector.
+
+    Combines Harris corner detection for spatial localization
+    and Laplacian-based scale selection for scale invariance.
+    """
+    scales = params['scales']
+    
+    # Ensure grayscale float
+    if len(img.shape) == 3:
+        gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+    else:
+        gray = img.copy()
+    gray = np.float32(gray) / 255.0
+
+    all_responses = []
 
     for sigma in scales:
-        # Smooth image at this scale
-        blur = cv2.GaussianBlur(operatedImage, (0, 0), sigma)
-        # Compute Harris response
-        Ix = cv2.Sobel(blur, cv2.CV_64F, 1, 0, ksize=3)
-        Iy = cv2.Sobel(blur, cv2.CV_64F, 0, 1, ksize=3)
-        Ixx = Ix**2
-        Iyy = Iy**2
-        Ixy = Ix * Iy
-        Sxx = cv2.GaussianBlur(Ixx, (0, 0), sigma)
-        Syy = cv2.GaussianBlur(Iyy, (0, 0), sigma)
-        Sxy = cv2.GaussianBlur(Ixy, (0, 0), sigma)
+        # Gaussian smoothing
+        blur = cv2.GaussianBlur(gray, (0, 0), sigma)
+
+        # Harris corner measure
+        Ix = cv2.Sobel(blur, cv2.CV_64F, 1, 0, ksize=ksize)
+        Iy = cv2.Sobel(blur, cv2.CV_64F, 0, 1, ksize=ksize)
+        Ixx, Iyy, Ixy = Ix**2, Iy**2, Ix * Iy
+        Sxx = cv2.GaussianBlur(Ixx, (blockSize, blockSize), sigma)
+        Syy = cv2.GaussianBlur(Iyy, (blockSize, blockSize), sigma)
+        Sxy = cv2.GaussianBlur(Ixy, (blockSize, blockSize), sigma)
         detM = Sxx * Syy - Sxy**2
         traceM = Sxx + Syy
         R = detM - k * traceM**2
 
-        # Threshold & record keypoints
-        corners = np.argwhere(R > 0.01 * R.max())
-        for y, x in corners:
-            keypoints.append((x, y, sigma, R[y, x]))
+        # Laplacian-of-Gaussian (for scale selection)
+        LoG = np.abs(sigma**2 * cv2.Laplacian(blur, cv2.CV_32F))
 
-    # Keep local maxima in scale-space (approximate)
-    keypoints = sorted(keypoints, key=lambda p: p[3], reverse=True)
+        all_responses.append((R, LoG, sigma))
 
+    # Collect keypoints with spatial + scale-space NMS
+    keypoints = []
+    for i, (R, LoG, sigma) in enumerate(all_responses):
+        # Threshold on Harris response
+        R_thresh = R > threshold * R.max()
+        coords = np.argwhere(R_thresh)
+
+        # 2D Non-maximum suppression
+        for y, x in coords:
+            y0, y1 = max(0, y - nms_radius), min(R.shape[0], y + nms_radius + 1)
+            x0, x1 = max(0, x - nms_radius), min(R.shape[1], x + nms_radius + 1)
+            local_patch = R[y0:y1, x0:x1]
+
+            if R[y, x] < np.max(local_patch):
+                continue  # Not spatial maximum
+
+            # Check scale-space maximum (LoG)
+            prev_LoG = all_responses[i-1][1][y, x] if i > 0 else -np.inf
+            next_LoG = all_responses[i+1][1][y, x] if i < len(all_responses)-1 else -np.inf
+            if LoG[y, x] > prev_LoG and LoG[y, x] > next_LoG:
+                keypoints.append(cv2.KeyPoint(float(x), float(y), size=float(2*sigma)))
+                
+    if len(keypoints) > 0:
+        # Extract responses for each keypoint
+        responses = []
+        for kp in keypoints:
+            y, x = int(kp.pt[1]), int(kp.pt[0])
+            # Pick corresponding R value at nearest scale
+            R_nearest = all_responses[min(range(len(all_responses)),
+                                          key=lambda i: abs(all_responses[i][2] - kp.size/2))][0]
+            kp.response = R_nearest[y, x]
+            responses.append(kp.response)
+    
+        # Sort and keep only the strongest max_kps
+        keypoints = sorted(keypoints, key=lambda kp: kp.response, reverse=True)
+        keypoints = keypoints[:max_kps]
+
+    # Visualization
     if visualize:
-        for x, y, sigma, _ in keypoints[:500]:
-            cv2.circle(img, (x, y), int(sigma), (0, 0, 255), 1)
-
-        plt.imshow(cv2.cvtColor(img, cv2.COLOR_BGR2RGB))
+        img_viz = cv2.cvtColor(gray, cv2.COLOR_GRAY2BGR)
+        for kp in keypoints:
+            cv2.circle(img_viz, (int(kp.pt[0]), int(kp.pt[1])), int(kp.size/2), (0, 0, 255), 1)
+        plt.imshow(cv2.cvtColor(img_viz, cv2.COLOR_BGR2RGB))
         plt.axis("off")
+        plt.title("Harris–Laplacian Keypoints")
         plt.show()
-
-    keypoints = to_keypoints(keypoints, size=3)
 
     return keypoints
 
 
-def dog_detection(img: np.ndarray) -> list[cv2.KeyPoint]:
+def dog_detection(img: np.ndarray, visualize: bool = False) -> list[cv2.KeyPoint]:
+    if (len(img.shape) > 2):
+        img = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
     # SIFT is DoG-based
     sift = cv2.SIFT_create()
     keypoints = sift.detect(img, None)
@@ -173,21 +254,68 @@ def to_keypoints(points, size=3):
     return kps
 
 
+def opponent_sift(image, keypoints=None, max_points=None):
+    if (len(image.shape) == 2):
+        image = cv2.cvtColor(image, cv2.COLOR_GRAY2BGR)
+
+    img = image.astype(np.float32) / 255.0
+    B, G, R = cv2.split(img)
+
+    # Opponent channels
+    O1 = (R - G) / np.sqrt(2.0)
+    O2 = (R + G - 2.0 * B) / np.sqrt(6.0)
+    O3 = (R + G + B) / np.sqrt(3.0)
+
+    # Normalize each channel to [0,255] and convert to uint8
+    def normalize_channel(ch):
+        ch_norm = cv2.normalize(ch, None, alpha=0, beta=255, norm_type=cv2.NORM_MINMAX)
+        return ch_norm.astype(np.uint8)
+
+    O1 = normalize_channel(O1)
+    O2 = normalize_channel(O2)
+    O3 = normalize_channel(O3)
+
+    # Create SIFT
+    sift = cv2.SIFT_create()
+
+    # If no keypoints given, detect them on grayscale
+    if keypoints is None:
+        gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
+        keypoints = sift.detect(gray, None)
+
+    if max_points and len(keypoints) > max_points:
+        keypoints = sorted(keypoints, key=lambda k: k.response, reverse=True)[:max_points]
+
+    # Compute descriptors per channel
+    _, desc1 = sift.compute(O1, keypoints)
+    _, desc2 = sift.compute(O2, keypoints)
+    _, desc3 = sift.compute(O3, keypoints)
+
+    if desc1 is None or desc2 is None or desc3 is None:
+        return keypoints, None
+
+    descriptors = np.hstack([desc1, desc2, desc3])
+    return keypoints, descriptors
+
+
 def compute_local_descriptors(
     img: np.ndarray, keypoints: list[cv2.KeyPoint], method="SIFT"
 ) -> tuple[list[cv2.KeyPoint], np.ndarray]:
     method = method.upper()
+    
+    descriptors = None
     if method == "SIFT":
         extractor = cv2.SIFT_create()
+        _, descriptors = extractor.compute(img, keypoints)
     elif method == "ORB":
         extractor = cv2.ORB_create()
-    elif method == "AKAZE":
-        extractor = cv2.AKAZE_create()
+        _, descriptors = extractor.compute(img, keypoints)
+    elif method == "COLOR-SIFT":
+        _, descriptors = opponent_sift(img, keypoints)
     else:
-        raise ValueError("Method must be one of: 'SIFT', 'ORB', 'AKAZE'")
-
-    keypoints, descriptors = extractor.compute(img, keypoints)
-    return keypoints, descriptors
+        raise ValueError("Method must be one of: 'SIFT', 'ORB', 'COLOR-SIFT'")
+        
+    return descriptors
 
 
 def keypoint_descriptor_template(
@@ -198,7 +326,7 @@ def keypoint_descriptor_template(
 
 
 def calculate_matches(
-    desc1: np.ndarray, desc2: np.ndarray, method="BF", ratio_threshold=0.75, use_cross_check=True, use_ratio_test=True
+    desc1: np.ndarray, desc2: np.ndarray, method="BF", ratio_threshold=0.7, use_cross_check=True, use_ratio_test=True
 ) -> tuple[int, list[cv2.DMatch]]:
     """
     Calculate matches between two descriptor sets with optional ratio test and cross-check.
@@ -247,7 +375,12 @@ def calculate_matches(
 
         elif use_ratio_test:
             # Use knnMatch for ratio test
-            matches = matcher.knnMatch(desc1, desc2, k=2)
+            matches = None
+            if (desc1.shape[0] > desc2.shape[0]):
+                matches = matcher.knnMatch(desc1, desc2, k=2)
+            else:
+                matches = matcher.knnMatch(desc2, desc1, k=2)
+                    
             good_matches = []
             for match_pair in matches:
                 if len(match_pair) == 2:
@@ -346,7 +479,7 @@ def keypoint_retrieval(
 
     def compute_descriptors_for_image(img):
         kps = keypoint_func(img.copy())
-        _, desc = compute_local_descriptors(img, kps, method=descriptor_method)
+        desc = compute_local_descriptors(img, kps, method=descriptor_method)
         return desc
 
     # Compute keypoints and descriptors for all BBDD images
@@ -391,36 +524,36 @@ def keypoint_retrieval(
         else:
             for name, img_list in tqdm(query_images.items(), desc="Query images"):
                 query_descriptors[name] = [compute_descriptors_for_image(img) for img in img_list]
-        pickle.dump(query_descriptors, open(pkl_path, "wb"))
-
+        pickle.dump(query_descriptors, open(pkl_path, "wb")) 
+    
     # Perform matching and retrieval
     print(f"Performing matching and retrieval (crossCheck={use_cross_check}, ratioTest={use_ratio_test})...")
     results = {}
 
-    for query_name, query_desc_list in query_descriptors.items():
-        query_idx = query_trans_inv[query_name]
-        results[query_idx] = []
-
-        for query_desc in query_desc_list:
-            matches_list = []
-
-            for bbdd_name, bbdd_desc in bbdd_descriptors.items():
-                bbdd_idx = bbdd_trans_inv[bbdd_name]
-                n_matches, _ = calculate_matches(
-                    query_desc,
-                    bbdd_desc,
-                    method=matcher_method,
-                    ratio_threshold=ratio_threshold,
-                    use_cross_check=use_cross_check,
-                    use_ratio_test=use_ratio_test,
-                )
-                if n_matches <= 5:
-                    matches_list.append((0, -1))
-                else:
+    try:
+        for query_name, query_desc_list in query_descriptors.items():
+            query_idx = query_trans_inv[query_name]
+            results[query_idx] = []
+        
+            for query_desc in query_desc_list:
+                matches_list = []
+    
+                for bbdd_name, bbdd_desc in bbdd_descriptors.items():
+                    bbdd_idx = bbdd_trans_inv[bbdd_name]
+                    n_matches, _ = calculate_matches(
+                        query_desc,
+                        bbdd_desc,
+                        method=matcher_method,
+                        ratio_threshold=ratio_threshold,
+                        use_cross_check=use_cross_check,
+                        use_ratio_test=use_ratio_test,
+                    )
                     matches_list.append((n_matches, bbdd_idx))
-
-            # Sort by number of matches (descending) and take top_k
-            matches_list.sort(key=lambda x: x[0], reverse=True)
-            results[query_idx].append(matches_list[:top_k])
+    
+                # Sort by number of matches (descending) and take top_k
+                matches_list.sort(key=lambda x: x[0], reverse=True)
+                results[query_idx].append(matches_list[:top_k])
+    except Exception as e:
+        print(f"Error matching: {e}")
 
     return results

@@ -19,6 +19,7 @@ def preprocess_images(
 
             if do_denoise:
                 # b) Gray-world white balance (balanceig simple de canals)
+                """
                 img_f = single_img.astype(np.float32) + 1e-6
                 mB, mG, mR = [img_f[:, :, c].mean() for c in range(3)]
                 g = (mB + mG + mR) / 3.0
@@ -26,10 +27,43 @@ def preprocess_images(
                 img_f[:, :, 1] *= g / mG
                 img_f[:, :, 2] *= g / mR
                 img_bal = np.clip(img_f, 0, 255).astype(np.uint8)
-
+                """
                 # d) Suavitzat bilateral (treu soroll preservant vores i color)
-                img_smooth = denoise_image(img_bal)
-                # img_smooth = cv2.medianBlur(img_bal, 3)
+                # img_smooth = denoise_image(img_bal)
+                img_smooth = cv2.medianBlur(single_img, 3)
+
+                processed_list.append(img_smooth)
+            else:
+                processed_list.append(single_img)
+        images[img_name] = processed_list
+    return images
+
+def preprocess_images_2(
+    images: dict[str, list[np.ndarray]], do_resize: bool = True, do_denoise: bool = True
+) -> dict[str, list[np.ndarray]]:
+    for img_name, img in images.items():
+        processed_list = []
+        for single_img in img:
+            # a) Resize coherent
+            if do_resize:
+                single_img = cv2.resize(
+                    single_img, (256, 256), interpolation=cv2.INTER_AREA
+                )
+
+            if do_denoise:
+                # b) Gray-world white balance (balanceig simple de canals)
+                """
+                img_f = single_img.astype(np.float32) + 1e-6
+                mB, mG, mR = [img_f[:, :, c].mean() for c in range(3)]
+                g = (mB + mG + mR) / 3.0
+                img_f[:, :, 0] *= g / mB
+                img_f[:, :, 1] *= g / mG
+                img_f[:, :, 2] *= g / mR
+                img_bal = np.clip(img_f, 0, 255).astype(np.uint8)
+                """
+                # d) Suavitzat bilateral (treu soroll preservant vores i color)
+                # img_smooth = denoise_image(img_bal)
+                img_smooth = cv2.medianBlur(single_img, 3)
 
                 processed_list.append(img_smooth)
             else:
