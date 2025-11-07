@@ -653,6 +653,8 @@ def get_mask_and_crops_refined(
     )
 
     # --- 4️⃣ Generar crops, máscaras y bboxes basadas en la nueva máscara ---
+    
+    H, W = mask_sel.shape
     crops_img, crops_mask, bboxes = [], [], []
     for comp in refined_comps:
         x1, y1, x2, y2 = comp["bbox"]
@@ -660,10 +662,17 @@ def get_mask_and_crops_refined(
         crop_img = img_bgr[y1:y2+1, x1:x2+1]
         crop_mask = refined_mask[y1:y2+1, x1:x2+1]
 
-        crops_img.append(crop_img)
+        # crops_img.append(crop_img)
+        if W > H:
+            crops_img.append((x1, crop_img))
+        else:
+            crops_img.append((y1, crop_img))
         crops_mask.append(crop_mask)
         bboxes.append((x1, y1, x2, y2))
-
+    crops_img.sort(key=lambda item: (item[0]))
+    crops_img = [crop for _, crop in crops_img]
+    if len(crops_img) > 2:
+        crops_img = crops_img[:2]
     # --- 5️⃣ Visualización final basada en componentes refinados ---
     vis = cv2.cvtColor(img_bgr, cv2.COLOR_BGR2RGB).copy()
     for i, (x1, y1, x2, y2) in enumerate(bboxes):

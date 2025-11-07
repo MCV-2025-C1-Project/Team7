@@ -35,7 +35,7 @@ def process_folder_and_save(
 
         # 1️⃣ Obtener todas las máscaras intermedias y recortes
         masks = hybrid_mask_fft_color_lab(img_bgr)
-        res = get_mask_and_crops(
+        res = get_mask_and_crops_refined(
             [img_bgr],
             use_mask=use_mask,
             min_area=min_area,
