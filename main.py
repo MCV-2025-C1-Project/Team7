@@ -1,4 +1,3 @@
-import copy
 import pickle
 import time
 from pathlib import Path
@@ -14,9 +13,17 @@ from descriptors import (
     glcm_block_descriptor_func,
     hsv_block_hist_concat_func,
 )
-from keypoints import calculate_matches, compute_local_descriptors, harris_corner_detection_func, keypoint_retrieval
+from keypoints import (
+    calculate_matches,
+    compute_local_descriptors, 
+    harris_corner_detection, 
+    keypoint_retrieval,
+    dog_detection,
+    harris_corner_detection_func,
+    harris_laplacian_detection_func
+)
 from metrics import binary_mask_evaluation, mean_average_precision_K
-from preprocess import preprocess_images
+from preprocess import preprocess_images, preprocess_images_2
 from retrieval import retrieval
 from segmentation import get_crops_from_gt_mask, get_mask_and_crops
 from similarity import (
@@ -64,7 +71,7 @@ def compute_keypoint_retrieval(
         map_results = pickle.load(open(result_pkl_filename, "rb"))
     else:
         # Perform retrieval using keypoint matching
-        try:
+        try:                     
             retrieval_results = keypoint_retrieval(
                 bbdd_images,
                 query_images,
@@ -75,7 +82,7 @@ def compute_keypoint_retrieval(
                 use_cross_check=use_cross_check,
                 use_ratio_test=use_ratio_test,
             )
-
+                
             # Calculate mAP for different K values
             map_results = {}
             for k in TOPK:
@@ -83,6 +90,9 @@ def compute_keypoint_retrieval(
                 truncated_results = {}
                 for query_idx, crop_results in retrieval_results.items():
                     truncated_results[query_idx] = [res[:k] for res in crop_results]
+                    max_matches = truncated_results[query_idx][0][0][0]
+                    if max_matches < 10:
+                        truncated_results[query_idx] = [[(0, -1)]]
 
                 # Calculate mAP@K
                 map_k = mean_average_precision_K(truncated_results, gt, K=k)
@@ -116,7 +126,7 @@ def compute_keypoint_retrieval(
         kp_func,
         desc_method,
         config_name,
-        num_visualize=333,
+        num_visualize=15,
     )
 
 
@@ -328,8 +338,8 @@ def best_of_each_week():
     for name, img in qsd1_4_corresps_images.items():
         max_matches = (0, "", [])
         for query_name, query_img in qsd1_4_images.items():
-            harris_bbdd = copy.deepcopy(img[0])
-            harris_query = copy.deepcopy(query_img[0])
+            harris_bbdd = cv2.cvtColor(img[0].copy(), cv2.COLOR_BGR2GRAY)
+            harris_query = cv2.cvtColor(query_img[0].copy(), cv2.COLOR_BGR2GRAY)
             # harris_lap = copy.deepcopy(img[0])
             # dog = copy.deepcopy(img[0])
 
@@ -338,8 +348,8 @@ def best_of_each_week():
             # kps_harris_lap = harris_laplacian_detection(harris_lap)
             # kps_dog = dog_detection(dog)
 
-            kps, desc1 = compute_local_descriptors(img[0], kps_harris_bbdd, method="SIFT")
-            kps, desc2 = compute_local_descriptors(query_img[0], kps_harris_query, method="SIFT")
+            kps, desc1 = compute_local_descriptors(harris_bbdd, kps_harris_bbdd, method="SIFT")
+            kps, desc2 = compute_local_descriptors(harris_query, kps_harris_query, method="SIFT")
 
             n_matches, matches = calculate_matches(desc1, desc2)
 
@@ -562,14 +572,18 @@ def test_weekn_weekm(weekn: int = 4, weekm: int = 4):
     save_results = True  # If True, saves results of retrieval in method_bins_grids.pkl
     test_mode = False  # If True, only process a few images for quick testing & visualization purposes
     harris_params = {"blockSize": 3, "ksize": 3, "k": 0.06, "threshold": 0.001, "nms_radius": 3}
+    harris_lap_params = {'blockSize':5,'ksize':3,'k':0.04,'threshold':0.02,'nms_radius':6,'scales':[1.6,3.2,6.4],'max_kps':2000}
     keypoint_methods = {
-        "harris": harris_corner_detection_func(**harris_params),
-        # "harris_laplacian": harris_laplacian_detection,
-        # "dog": dog_detection,
+        #"harris": harris_corner_detection_func(**harris_params),
+        "harris_laplacian": harris_laplacian_detection_func(**harris_lap_params),
+        #"dog": dog_detection,
     }
 
-    descriptor_methods = ["ORB"]
-    matcher_methods = ["BF"]
+    descriptor_methods = [#"SIFT", 
+                          #"ORB", 
+                          "COLOR-SIFT"
+                          ]
+    matcher_methods = ["BF"]  # "FLANN" can be added
 
     # Create results directory if it doesn't exist
     if save_results:
@@ -598,7 +612,7 @@ def test_weekn_weekm(weekn: int = 4, weekm: int = 4):
 
     # 1.1) Load all images into a dictionary, key is the filename without extension and value is the image in bgr
     bbdd_images = {img_path.stem: [cv2.imread(str(img_path))] for img_path in bbdd_pathlist}
-    qsd1_images = {img_path.stem: [cv2.imread(str(img_path))] for img_path in qsd1_pathlist}
+    qsd1_w1_images = {img_path.stem: [cv2.imread(str(img_path))] for img_path in qsd1_pathlist}
     qsd1_w4_images = {img_path.stem: [cv2.imread(str(img_path))] for img_path in qsd1_w4_pathlist}
     qsd1_w4_gt_masks = {
         img_path.stem: [cv2.imread(str(img_path), cv2.IMREAD_GRAYSCALE)] for img_path in qsd1_w4_gt_masks_pathlist
@@ -607,7 +621,7 @@ def test_weekn_weekm(weekn: int = 4, weekm: int = 4):
     qsd2_w3_gt_masks = {
         img_path.stem: [cv2.imread(str(img_path), cv2.IMREAD_GRAYSCALE)] for img_path in qsd2_w3_gt_masks_pathlist
     }
-
+    
     # Segment query images to get crops
     # print("Segmenting qsd1_w4 using our method...")
     # qsd1_4_images_preprocessed = preprocess_images(qsd1_4_images, do_resize=False)
@@ -615,6 +629,7 @@ def test_weekn_weekm(weekn: int = 4, weekm: int = 4):
     # for name, img in qsd1_4_images_preprocessed.items():
     #     result = get_mask_and_crops(img_list=img, use_mask="mask_lab", min_area=1500)
     #     qsd1_4_crops[name] = result["crops_img"]
+    
     print(f"Loading images took {time.perf_counter() - tic_init:.2f} seconds.")
     print("Segmenting qsd2_w3 using gt masks...")
     tic = time.perf_counter()
@@ -631,16 +646,21 @@ def test_weekn_weekm(weekn: int = 4, weekm: int = 4):
         )
         qsd1_w4_gt_crops[name] = crops_from_gt
     print(f"Segmenting block took {time.perf_counter() - tic:.2f} seconds.")
-
+    
     # 2) Preprocess all images with the same preprocessing method (resize 256x256, color balance, contrast&brightness adjustment, smoothing)
     print(f"Preprocessing images... (from init took {time.perf_counter() - tic_init:.2f} seconds)")
     tic = time.perf_counter()
-    lists_to_preprocess = [bbdd_images, qsd1_images, qsd1_w4_gt_crops]
+    lists_to_preprocess = [bbdd_images]
     for i in range(len(lists_to_preprocess)):
-        lists_to_preprocess[i] = preprocess_images(lists_to_preprocess[i], do_denoise=False)
-
+        preprocess_images(lists_to_preprocess[i], do_denoise=False)
+    
+    lists_to_preprocess = [qsd1_w4_gt_crops]
+    for i in range(len(lists_to_preprocess)):
+        preprocess_images_2(lists_to_preprocess[i], do_denoise=True)
+        
     all_results = {}
     print(f"Preprocessing took {time.perf_counter() - tic:.2f} seconds.")
+    
     print(f"Starting keypoint methods testing... (from init took {time.perf_counter() - tic_init:.2f} seconds)")
     # Testing loop
     all_results = {}
@@ -709,16 +729,19 @@ def visualize_keypoint_matches(
             except (IndexError, KeyError):
                 gt_name = "N/A"
                 is_correct = False
+                if best_match_n < 10 and gt_idx == -1:
+                    is_correct = True
+            
 
             # Compute keypoints and descriptors
             query_img = query_crops[crop_idx]
             bbdd_img = bbdd_images[bbdd_name][0]
 
-            kps_query = keypoint_func(query_img.copy())
-            kps_bbdd = keypoint_func(bbdd_img.copy())
+            kps_query = keypoint_func(query_img.copy(), **presets)
+            kps_bbdd = keypoint_func(bbdd_img.copy(), **presets)
 
-            _, desc_query = compute_local_descriptors(query_img, kps_query, method=descriptor_method)
-            _, desc_bbdd = compute_local_descriptors(bbdd_img, kps_bbdd, method=descriptor_method)
+            desc_query = compute_local_descriptors(query_img, kps_query, method=descriptor_method)
+            desc_bbdd = compute_local_descriptors(bbdd_img, kps_bbdd, method=descriptor_method)
 
             n_matches, matches = calculate_matches(desc_query, desc_bbdd)
 
@@ -732,6 +755,9 @@ def visualize_keypoint_matches(
                 None,
                 flags=cv2.DrawMatchesFlags_NOT_DRAW_SINGLE_POINTS,
             )
+            
+            if best_match_n < 10:
+                bbdd_name = -1
 
             savepath = Path("./visualize") / "week4_keypoint_matches"
             savepath.mkdir(parents=True, exist_ok=True)
