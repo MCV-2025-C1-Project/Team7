@@ -55,7 +55,6 @@ def compute_keypoint_retrieval(
     all_results,
     force_retrieval: bool = True,
     save_results: bool = True,
-    use_cross_check: bool = False,
     use_ratio_test: bool = True,
     ratio_threshold: float = 0.75,
 ) -> dict:
@@ -81,7 +80,6 @@ def compute_keypoint_retrieval(
                 descriptor_method=desc_method,
                 matcher_method=matcher_method,
                 top_k=max(TOPK),
-                use_cross_check=use_cross_check,
                 use_ratio_test=use_ratio_test,
                 ratio_threshold=ratio_threshold,
                 force_retrieval=force_retrieval,
@@ -579,11 +577,11 @@ def test_weekn_weekm(weekn: int = 4, weekm: int = 4):
     harris_lap_params = {'blockSize':5,'ksize':3,'k':0.04,'threshold':0.02,'nms_radius':6,'scales':[1.6,3.2,6.4],'max_kps':2000}
 
     combinations = [
-        ("harris", harris_corner_detection_func(**harris_params), "ORB", "BF"),
-        ("harris", harris_corner_detection_func(**harris_params), "SIFT", "BF"),
-        ("dog", dog_detection, "SIFT", "BF"),
-        ("orb", orb_detection, "ORB", "BF"),
-        ("harris_laplacian", harris_laplacian_detection_func(**harris_lap_params), "COLOR-SIFT", "BF"),
+        ("harris", harris_corner_detection_func(**harris_params), "ORB", "BF-CROSS"),
+        ("harris", harris_corner_detection_func(**harris_params), "SIFT", "BF-CROSS"),
+        ("dog", dog_detection, "SIFT", "BF-CROSS"),
+        ("orb", orb_detection, "ORB", "BF-CROSS"),
+        ("harris_laplacian", harris_laplacian_detection_func(**harris_lap_params), "COLOR-SIFT", "BF-RATIO"),
     ]
 
     # Create results directory if it doesn't exist

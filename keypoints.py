@@ -326,7 +326,7 @@ def keypoint_descriptor_template(
 
 
 def calculate_matches(
-    desc1: np.ndarray, desc2: np.ndarray, method="BF", ratio_threshold=0.7, use_cross_check=True, use_ratio_test=True
+    desc1: np.ndarray, desc2: np.ndarray, method="BF-CROSS", ratio_threshold=0.7, use_ratio_test=True
 ) -> tuple[int, list[cv2.DMatch]]:
     """
     Calculate matches between two descriptor sets with optional ratio test and cross-check.
@@ -336,7 +336,6 @@ def calculate_matches(
         desc2: Second descriptor set
         method: Matching method ('BF' or 'FLANN')
         ratio_threshold: Lowe's ratio threshold (0.75 recommended)
-        use_cross_check: Use cross-check constraint (only for BF, more restrictive)
         use_ratio_test: Apply Lowe's ratio test (better quality, incompatible with crossCheck)
 
     Returns:
@@ -350,52 +349,44 @@ def calculate_matches(
     norm = cv2.NORM_HAMMING if desc1.dtype == np.uint8 else cv2.NORM_L2
 
     method = method.upper()
-    # CrossCheck and ratio test are mutually exclusive
-    if use_cross_check and use_ratio_test:
-        use_ratio_test = False  # Prioritize cross-check for BF
 
-    if method == "BF":
+    if method == "BF-CROSS":
         # Use crossCheck for higher quality matches (symmetric matching)
-        matcher = cv2.BFMatcher(norm, crossCheck=use_cross_check)
+        matcher = cv2.BFMatcher(norm, crossCheck=True)
 
-        if use_cross_check:
-            # CrossCheck uses simple match() - no ratio test
-            matches = matcher.match(desc1, desc2)
-            # Sort by distance (lower is better)
-            good_matches = sorted(matches, key=lambda x: x.distance)
+        # CrossCheck uses simple match() - no ratio test
+        matches = matcher.match(desc1, desc2)
+        # Sort by distance (lower is better)
+        good_matches = sorted(matches, key=lambda x: x.distance)
 
-            # Optional: apply distance threshold for even stricter filtering
-            if len(good_matches) > 0:
-                # Keep matches within 2x of minimum distance
-                min_dist = good_matches[0].distance
-                threshold = max(min_dist * 2.5, 30.0)  # At least 30 to avoid being too strict
-                good_matches = [m for m in good_matches if m.distance < threshold]
+        # Optional: apply distance threshold for even stricter filtering
+        if len(good_matches) > 0:
+            # Keep matches within 2x of minimum distance
+            min_dist = good_matches[0].distance
+            threshold = max(min_dist * 2.5, 30.0)  # At least 30 to avoid being too strict
+            good_matches = [m for m in good_matches if m.distance < threshold]
 
-            return len(good_matches), good_matches
+        return len(good_matches), good_matches
 
-        elif use_ratio_test:
-            # Use knnMatch for ratio test
-            matches = None
-            if (desc1.shape[0] > desc2.shape[0]):
-                matches = matcher.knnMatch(desc1, desc2, k=2)
-            else:
-                matches = matcher.knnMatch(desc2, desc1, k=2)
-                    
-            good_matches = []
-            for match_pair in matches:
-                if len(match_pair) == 2:
-                    m, n = match_pair
-                    if m.distance < ratio_threshold * n.distance:
-                        good_matches.append(m)
-                elif len(match_pair) == 1:
-                    good_matches.append(match_pair[0])
-
-            return len(good_matches), good_matches
-
+    if method == "BF-RATIO":
+        matcher = cv2.BFMatcher(norm, crossCheck=False)
+        # Use knnMatch for ratio test
+        matches = None
+        if (desc1.shape[0] > desc2.shape[0]):
+            matches = matcher.knnMatch(desc1, desc2, k=2)
         else:
-            # No filtering, just match
-            matches = matcher.match(desc1, desc2)
-            return len(matches), matches
+            matches = matcher.knnMatch(desc2, desc1, k=2)
+                
+        good_matches = []
+        for match_pair in matches:
+            if len(match_pair) == 2:
+                m, n = match_pair
+                if m.distance < ratio_threshold * n.distance:
+                    good_matches.append(m)
+            elif len(match_pair) == 1:
+                good_matches.append(match_pair[0])
+
+        return len(good_matches), good_matches
 
     elif method == "FLANN":
         # FLANN doesn't support crossCheck, always use ratio test
@@ -440,8 +431,7 @@ def keypoint_retrieval(
     query_images: dict[str, list[np.ndarray]],
     keypoint_func,
     descriptor_method: str = "SIFT",
-    matcher_method: str = "BF",
-    use_cross_check: bool = True,
+    matcher_method: str = "BF-CROSS",
     use_ratio_test: bool = False,
     ratio_threshold: float = 0.75,
     top_k: int = 10,
@@ -458,7 +448,6 @@ def keypoint_retrieval(
         keypoint_func: Function to detect keypoints (e.g., harris_corner_detection)
         descriptor_method: Local descriptor method ('SIFT', 'ORB', 'AKAZE')
         matcher_method: Matching method ('BF', 'FLANN')
-        use_cross_check: Use cross-check constraint (only for BF, higher quality)
         use_ratio_test: Apply Lowe's ratio test (better quality, slower)
         ratio_threshold: Threshold for ratio test
         top_k: Number of top matches to return
@@ -527,7 +516,7 @@ def keypoint_retrieval(
         pickle.dump(query_descriptors, open(pkl_path, "wb")) 
     
     # Perform matching and retrieval
-    print(f"Performing matching and retrieval (crossCheck={use_cross_check}, ratioTest={use_ratio_test})...")
+    print(f"Performing matching and retrieval (method={matcher_method})...")
     results = {}
 
     try:
@@ -545,7 +534,6 @@ def keypoint_retrieval(
                         bbdd_desc,
                         method=matcher_method,
                         ratio_threshold=ratio_threshold,
-                        use_cross_check=use_cross_check,
                         use_ratio_test=use_ratio_test,
                     )
                     matches_list.append((n_matches, bbdd_idx))
