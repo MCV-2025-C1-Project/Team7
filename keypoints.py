@@ -37,7 +37,7 @@ def harris_corner_detection(
     operatedImage = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
     operatedImage = np.float32(operatedImage)
 
-    dest = cv2.cornerHarris(operatedImage, blockSize, ksize, k)  # Try different parameter values
+    dest = cv2.cornerHarris(operatedImage, blockSize, ksize, k)
     dest = cv2.dilate(dest, None)
 
     threshold_value = threshold * dest.max()
@@ -140,11 +140,18 @@ def dog_detection(img: np.ndarray) -> list[cv2.KeyPoint]:
     # SIFT is DoG-based
     sift = cv2.SIFT_create()
     keypoints = sift.detect(img, None)
-    img_out = cv2.drawKeypoints(img, keypoints, None, flags=cv2.DRAW_MATCHES_FLAGS_DRAW_RICH_KEYPOINTS)
+    # img_out = cv2.drawKeypoints(img, keypoints, None, flags=cv2.DRAW_MATCHES_FLAGS_DRAW_RICH_KEYPOINTS)
 
-    plt.imshow(cv2.cvtColor(img_out, cv2.COLOR_BGR2RGB))
-    plt.axis("off")
-    plt.show()
+    # plt.imshow(cv2.cvtColor(img_out, cv2.COLOR_BGR2RGB))
+    # plt.axis("off")
+    # plt.show()
+
+    return keypoints
+
+
+def orb_detection(img: np.ndarray) -> list[cv2.KeyPoint]:
+    orb = cv2.ORB_create()
+    keypoints = orb.detect(img, None)
 
     return keypoints
 
@@ -307,6 +314,7 @@ def keypoint_retrieval(
     top_k: int = 10,
     parallel: bool = False,
     max_workers: int = 8,
+    force_retrieval: bool = True,
 ) -> dict[int, list[list[tuple[int, int]]]]:
     """
     Perform image retrieval using keypoint matching with optional parallelization.
@@ -344,7 +352,7 @@ def keypoint_retrieval(
     # Compute keypoints and descriptors for all BBDD images
     print("Computing BBDD keypoints and descriptors...")
     pkl_path = Path("./week4_pkl") / f"bbdd_{keypoint_func.__name__}_{descriptor_method}.pkl"
-    if pkl_path.exists():
+    if pkl_path.exists() and not force_retrieval:
         with open(pkl_path, "rb") as f:
             bbdd_descriptors = pickle.load(f)
         print("Loaded BBDD descriptors from pickle.")
@@ -368,7 +376,7 @@ def keypoint_retrieval(
     # Compute keypoints and descriptors for all query images
     print("Computing query keypoints and descriptors...")
     pkl_path = Path("./week4_pkl") / f"query_{keypoint_func.__name__}_{descriptor_method}.pkl"
-    if pkl_path.exists():
+    if pkl_path.exists() and not force_retrieval:
         with open(pkl_path, "rb") as f:
             query_descriptors = pickle.load(f)
         print("Loaded query descriptors from pickle.")
@@ -406,7 +414,10 @@ def keypoint_retrieval(
                     use_cross_check=use_cross_check,
                     use_ratio_test=use_ratio_test,
                 )
-                matches_list.append((n_matches, bbdd_idx))
+                if n_matches <= 5:
+                    matches_list.append((0, -1))
+                else:
+                    matches_list.append((n_matches, bbdd_idx))
 
             # Sort by number of matches (descending) and take top_k
             matches_list.sort(key=lambda x: x[0], reverse=True)

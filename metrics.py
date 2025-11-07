@@ -1,11 +1,10 @@
-import numpy as np
 from math import log10, sqrt
+
+import numpy as np
 from skimage.metrics import structural_similarity as ssim
 
 
-def mean_average_precision_K(
-    results: dict[int, list[list[tuple[float, int]]]], gt: list[list[int]], K: int = 1
-):
+def mean_average_precision_K(results: dict[int, list[list[tuple[float, int]]]], gt: list[list[int]], K: int = 1):
     """
     Computes the mean average precision at K.
     Args:
@@ -34,6 +33,7 @@ def mean_average_precision_K(
                 if img_index in relevant:
                     num_retrieved_relevant += 1
                     precision_sum += num_retrieved_relevant / k
+                    break  # We only want the first relevant image
 
             if num_retrieved_relevant > 0:
                 ap_sum += precision_sum / len(relevant)
@@ -64,11 +64,7 @@ def binary_mask_evaluation(mask: np.ndarray, gt: np.ndarray):
 
     precision = TP / (TP + FP) if (TP + FP) > 0 else 0.0
     recall = TP / (TP + FN) if (TP + FN) > 0 else 0.0
-    F1 = (
-        (2 * precision * recall) / (precision + recall)
-        if (precision + recall) > 0
-        else 0.0
-    )
+    F1 = (2 * precision * recall) / (precision + recall) if (precision + recall) > 0 else 0.0
 
     return {"precision": precision, "recall": recall, "F1": F1}
 

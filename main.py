@@ -14,7 +14,14 @@ from descriptors import (
     glcm_block_descriptor_func,
     hsv_block_hist_concat_func,
 )
-from keypoints import calculate_matches, compute_local_descriptors, harris_corner_detection_func, keypoint_retrieval
+from keypoints import (
+    calculate_matches,
+    compute_local_descriptors,
+    dog_detection,
+    harris_corner_detection_func,
+    keypoint_retrieval,
+    orb_detection,
+)
 from metrics import binary_mask_evaluation, mean_average_precision_K
 from preprocess import preprocess_images
 from retrieval import retrieval
@@ -49,6 +56,7 @@ def compute_keypoint_retrieval(
     save_results: bool = True,
     use_cross_check: bool = False,
     use_ratio_test: bool = True,
+    ratio_threshold: float = 0.75,
 ) -> dict:
     kp_name, kp_func = kp_method
     config_name = f"{kp_name}_{desc_method}_{matcher_method}"
@@ -74,6 +82,8 @@ def compute_keypoint_retrieval(
                 top_k=max(TOPK),
                 use_cross_check=use_cross_check,
                 use_ratio_test=use_ratio_test,
+                ratio_threshold=ratio_threshold,
+                force_retrieval=force_retrieval,
             )
 
             # Calculate mAP for different K values
@@ -116,7 +126,7 @@ def compute_keypoint_retrieval(
         kp_func,
         desc_method,
         config_name,
-        num_visualize=333,
+        num_visualize=15,
     )
 
 
@@ -561,15 +571,14 @@ def test_weekn_weekm(weekn: int = 4, weekm: int = 4):
     force_retrieval = True  # If True, forces recomputation of descriptors and retrieval even if result pkl files exist
     save_results = True  # If True, saves results of retrieval in method_bins_grids.pkl
     test_mode = False  # If True, only process a few images for quick testing & visualization purposes
-    harris_params = {"blockSize": 3, "ksize": 3, "k": 0.06, "threshold": 0.001, "nms_radius": 3}
-    keypoint_methods = {
-        "harris": harris_corner_detection_func(**harris_params),
-        # "harris_laplacian": harris_laplacian_detection,
-        # "dog": dog_detection,
-    }
+    harris_params = {"blockSize": 2, "ksize": 3, "k": 0.04, "threshold": 0.05, "nms_radius": 10}
 
-    descriptor_methods = ["ORB"]
-    matcher_methods = ["BF"]
+    combinations = [
+        ("harris", harris_corner_detection_func(**harris_params), "ORB", "BF"),
+        ("harris", harris_corner_detection_func(**harris_params), "SIFT", "BF"),
+        ("dog", dog_detection, "SIFT", "BF"),
+        ("orb", orb_detection, "ORB", "BF"),
+    ]
 
     # Create results directory if it doesn't exist
     if save_results:
@@ -609,56 +618,60 @@ def test_weekn_weekm(weekn: int = 4, weekm: int = 4):
     }
 
     # Segment query images to get crops
-    # print("Segmenting qsd1_w4 using our method...")
-    # qsd1_4_images_preprocessed = preprocess_images(qsd1_4_images, do_resize=False)
-    # qsd1_4_crops = {}
-    # for name, img in qsd1_4_images_preprocessed.items():
-    #     result = get_mask_and_crops(img_list=img, use_mask="mask_lab", min_area=1500)
-    #     qsd1_4_crops[name] = result["crops_img"]
     print(f"Loading images took {time.perf_counter() - tic_init:.2f} seconds.")
-    print("Segmenting qsd2_w3 using gt masks...")
+    print("Segmenting qsd1_w4 using our method...")
     tic = time.perf_counter()
-    qsd1_w4_gt_crops = {}
+    qsd1_4_crops = {}
     for name, img in qsd1_w4_images.items():
-        mask_gt = qsd1_w4_gt_masks[name][0]
-        # Generate crops from ground truth mask
-        crops_from_gt = get_crops_from_gt_mask(
+        result = get_mask_and_crops(
             img_list=img,
-            mask_gt=mask_gt,
-            min_area=1500,
-            reject_border=False,
-            padding=0,
+            use_mask="mask_lab",
+            min_area=1000,
+            reject_border=True,
+            outermost_only=True,
         )
-        qsd1_w4_gt_crops[name] = crops_from_gt
+        qsd1_4_crops[name] = result["crops_img"]
+    # print("Segmenting qsd1_w4 using gt masks...")
+    # tic = time.perf_counter()
+    # qsd1_w4_gt_crops = {}
+    # for name, img in qsd1_w4_images.items():
+    #     mask_gt = qsd1_w4_gt_masks[name][0]
+    #     # Generate crops from ground truth mask
+    #     crops_from_gt = get_crops_from_gt_mask(
+    #         img_list=img,
+    #         mask_gt=mask_gt,
+    #         min_area=1500,
+    #         reject_border=False,
+    #         padding=0,
+    #     )
+    #     qsd1_w4_gt_crops[name] = crops_from_gt
     print(f"Segmenting block took {time.perf_counter() - tic:.2f} seconds.")
 
     # 2) Preprocess all images with the same preprocessing method (resize 256x256, color balance, contrast&brightness adjustment, smoothing)
     print(f"Preprocessing images... (from init took {time.perf_counter() - tic_init:.2f} seconds)")
     tic = time.perf_counter()
-    lists_to_preprocess = [bbdd_images, qsd1_images, qsd1_w4_gt_crops]
+    lists_to_preprocess = [bbdd_images, qsd1_4_crops]
     for i in range(len(lists_to_preprocess)):
-        lists_to_preprocess[i] = preprocess_images(lists_to_preprocess[i], do_denoise=False)
-
-    all_results = {}
+        lists_to_preprocess[i] = preprocess_images(lists_to_preprocess[i])
     print(f"Preprocessing took {time.perf_counter() - tic:.2f} seconds.")
+
     print(f"Starting keypoint methods testing... (from init took {time.perf_counter() - tic_init:.2f} seconds)")
     # Testing loop
+    tic = time.perf_counter()
     all_results = {}
-    for kp_name, kp_func in keypoint_methods.items():
-        for desc_method in descriptor_methods:
-            for matcher_method in matcher_methods:
-                compute_keypoint_retrieval(
-                    bbdd_images,
-                    qsd1_w4_gt_crops,
-                    gt_qsd1_w4,
-                    (kp_name, kp_func),
-                    desc_method,
-                    matcher_method,
-                    all_results,
-                    force_retrieval,
-                    save_results,
-                )
-
+    for kp_name, kp_func, desc_method, matcher_method in combinations:
+        compute_keypoint_retrieval(
+            bbdd_images,
+            qsd1_4_crops,
+            gt_qsd1_w4,
+            (kp_name, kp_func),
+            desc_method,
+            matcher_method,
+            all_results,
+            force_retrieval,
+            save_results,
+        )
+    print(f"All keypoint methods tested in {time.perf_counter() - tic:.2f} seconds.")
     # Create summary DataFrame
     summary_df = pd.DataFrame(all_results).T
     print("\n" + "=" * 60)
@@ -699,7 +712,10 @@ def visualize_keypoint_matches(
                 break
             # Get best match
             best_match_n, best_match_idx = results[0]
-            bbdd_name = bbdd_trans[best_match_idx]
+            if best_match_idx != -1:
+                bbdd_name = bbdd_trans[best_match_idx]
+            else:
+                bbdd_name = "N/A"
 
             # Get GT match
             try:
@@ -712,7 +728,10 @@ def visualize_keypoint_matches(
 
             # Compute keypoints and descriptors
             query_img = query_crops[crop_idx]
-            bbdd_img = bbdd_images[bbdd_name][0]
+            if bbdd_name == "N/A":
+                bbdd_img = query_img
+            else:
+                bbdd_img = bbdd_images[bbdd_name][0]
 
             kps_query = keypoint_func(query_img.copy())
             kps_bbdd = keypoint_func(bbdd_img.copy())
@@ -741,7 +760,7 @@ def visualize_keypoint_matches(
             title = f"{config_name}\n"
             title += f"Query: {query_name} (crop {crop_idx}) -> Retrieved: {bbdd_name}\n"
             title += f"Matches: {n_matches} | GT: {gt_name} | "
-            title += f"{'✓ CORRECT' if is_correct else '✗ INCORRECT'}"
+            title += f"{'CORRECT' if is_correct else 'INCORRECT'}"
             plt.title(title)
             plt.axis("off")
             plt.tight_layout()

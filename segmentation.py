@@ -3,7 +3,6 @@ import numpy as np
 
 from filtering import (
     closing,
-    connected_components,
     connected_components_cv2,
     dilate_mask,
     erode_mask,
@@ -531,10 +530,17 @@ def get_mask_and_crops(
         crop_img = img_bgr[y1 : y2 + 1, x1 : x2 + 1]
         crop_mask = mask_sel[y1 : y2 + 1, x1 : x2 + 1]
 
-        crops_img.append(crop_img)
+        if W > H:
+            crops_img.append((x1, crop_img))
+        else:
+            crops_img.append((y1, crop_img))
         crops_mask.append(crop_mask)
         bboxes.append((x1, y1, x2, y2))
 
+    crops_img.sort(key=lambda item: (item[0]))
+    crops_img = [crop for _, crop in crops_img]
+    if len(crops_img) > 2:
+        crops_img = crops_img[:2]
     # Visualización
     vis = cv2.cvtColor(img_bgr, cv2.COLOR_BGR2RGB).copy()
     for i, (x1, y1, x2, y2) in enumerate(bboxes):
@@ -552,8 +558,8 @@ def get_mask_and_crops(
     }
 
 
-import cv2
 import numpy as np
+
 
 def get_mask_and_crops_refined(
     img_list: list[np.ndarray],
