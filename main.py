@@ -26,7 +26,7 @@ from keypoints import (
 from metrics import binary_mask_evaluation, mean_average_precision_K
 from preprocess import preprocess_images, preprocess_images_2
 from retrieval import retrieval
-from segmentation import get_crops_from_gt_mask, get_mask_and_crops
+from segmentation import get_crops_from_gt_mask, get_mask_and_crops_refined
 from similarity import (
     compute_euclidean_distance,
     compute_hellinger_distance,
@@ -610,12 +610,13 @@ def test_weekn_weekm(weekn: int = 4, weekm: int = 4):
     tic = time.perf_counter()
     qsd1_4_crops = {}
     for name, img in qsd1_w4_images.items():
-        result = get_mask_and_crops(
+        result = get_mask_and_crops_refined(
             img_list=img,
             use_mask="mask_lab",
-            min_area=1000,
-            reject_border=True,
-            outermost_only=True,
+            min_area = 2000,
+            reject_border = True,
+            border_margin = 2,
+            outermost_only = True,
         )
         qsd1_4_crops[name] = result["crops_img"]
     # print("Segmenting qsd1_w4 using gt masks...")
