@@ -1,8 +1,8 @@
 import cv2
 import numpy as np
-from filtering import laplacian_filter
 from tqdm import tqdm
-from denoise import denoise_image
+
+from filtering import laplacian_filter
 
 
 def preprocess_images(
@@ -13,21 +13,17 @@ def preprocess_images(
         for single_img in img:
             # a) Resize coherent
             if do_resize:
-                single_img = cv2.resize(
-                    single_img, (256, 256), interpolation=cv2.INTER_AREA
-                )
+                single_img = cv2.resize(single_img, (256, 256), interpolation=cv2.INTER_AREA)
 
             if do_denoise:
                 # b) Gray-world white balance (balanceig simple de canals)
-                """
-                img_f = single_img.astype(np.float32) + 1e-6
-                mB, mG, mR = [img_f[:, :, c].mean() for c in range(3)]
-                g = (mB + mG + mR) / 3.0
-                img_f[:, :, 0] *= g / mB
-                img_f[:, :, 1] *= g / mG
-                img_f[:, :, 2] *= g / mR
-                img_bal = np.clip(img_f, 0, 255).astype(np.uint8)
-                """
+                # img_f = single_img.astype(np.float32) + 1e-6
+                # mB, mG, mR = [img_f[:, :, c].mean() for c in range(3)]
+                # g = (mB + mG + mR) / 3.0
+                # img_f[:, :, 0] *= g / mB
+                # img_f[:, :, 1] *= g / mG
+                # img_f[:, :, 2] *= g / mR
+                # img_bal = np.clip(img_f, 0, 255).astype(np.uint8)
                 # d) Suavitzat bilateral (treu soroll preservant vores i color)
                 # img_smooth = denoise_image(img_bal)
                 img_smooth = cv2.medianBlur(single_img, 3)
@@ -38,6 +34,7 @@ def preprocess_images(
         images[img_name] = processed_list
     return images
 
+
 def preprocess_images_2(
     images: dict[str, list[np.ndarray]], do_resize: bool = True, do_denoise: bool = True
 ) -> dict[str, list[np.ndarray]]:
@@ -46,9 +43,7 @@ def preprocess_images_2(
         for single_img in img:
             # a) Resize coherent
             if do_resize:
-                single_img = cv2.resize(
-                    single_img, (256, 256), interpolation=cv2.INTER_AREA
-                )
+                single_img = cv2.resize(single_img, (256, 256), interpolation=cv2.INTER_AREA)
 
             if do_denoise:
                 # b) Gray-world white balance (balanceig simple de canals)
