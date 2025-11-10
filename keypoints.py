@@ -56,13 +56,14 @@ def harris_corner_detection(
         savepath = Path("./visualize") / "harris_corner_detection"
         savepath.mkdir(parents=True, exist_ok=True)
         vis_img = img.copy()
-        for x, y, r in keypoints[:500]:  # Show top 500 for clarity
+        for x, y, r in keypoints:  # Show top 500 for clarity
             cv2.circle(vis_img, (int(x), int(y)), 3, (0, 0, 255), -1)
 
         plt.figure(figsize=(10, 10))
         plt.imshow(cv2.cvtColor(vis_img, cv2.COLOR_BGR2RGB))
         plt.title(f"Harris Corners: {len(keypoints)} detected")
         plt.axis("off")
+        plt.show()
         plt.savefig(savepath / "harris_corners.png")
         plt.close()
 
@@ -92,6 +93,7 @@ def harris_corner_detection_func(
 
     return custom_harris_corner_detection
 
+
 def harris_laplacian_detection_func(
     blockSize: int = 3,
     ksize: int = 3,
@@ -100,7 +102,7 @@ def harris_laplacian_detection_func(
     nms_radius: int = 3,
     max_kps: int = 2000,
     visualize: bool = False,
-    **params
+    **params,
 ) -> Callable[[np.ndarray], list[cv2.KeyPoint]]:
     def custom_harris_laplacian_detection(img: np.ndarray) -> list[cv2.KeyPoint]:
         return harris_laplacian_detection(
@@ -111,10 +113,11 @@ def harris_laplacian_detection_func(
             threshold=threshold,
             nms_radius=nms_radius,
             visualize=visualize,
-            **params
+            **params,
         )
 
     return custom_harris_laplacian_detection
+
 
 def harris_laplacian_detection(
     img: np.ndarray,
@@ -125,8 +128,7 @@ def harris_laplacian_detection(
     nms_radius: int = 3,
     max_kps: int = 2000,
     visualize: bool = False,
-    **params
-
+    **params,
 ) -> list[cv2.KeyPoint]:
     """
     Harris–Laplacian keypoint detector.
@@ -134,8 +136,8 @@ def harris_laplacian_detection(
     Combines Harris corner detection for spatial localization
     and Laplacian-based scale selection for scale invariance.
     """
-    scales = params['scales']
-    
+    scales = params["scales"]
+
     # Ensure grayscale float
     if len(img.shape) == 3:
         gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
@@ -182,22 +184,23 @@ def harris_laplacian_detection(
                 continue  # Not spatial maximum
 
             # Check scale-space maximum (LoG)
-            prev_LoG = all_responses[i-1][1][y, x] if i > 0 else -np.inf
-            next_LoG = all_responses[i+1][1][y, x] if i < len(all_responses)-1 else -np.inf
+            prev_LoG = all_responses[i - 1][1][y, x] if i > 0 else -np.inf
+            next_LoG = all_responses[i + 1][1][y, x] if i < len(all_responses) - 1 else -np.inf
             if LoG[y, x] > prev_LoG and LoG[y, x] > next_LoG:
-                keypoints.append(cv2.KeyPoint(float(x), float(y), size=float(2*sigma)))
-                
+                keypoints.append(cv2.KeyPoint(float(x), float(y), size=float(2 * sigma)))
+
     if len(keypoints) > 0:
         # Extract responses for each keypoint
         responses = []
         for kp in keypoints:
             y, x = int(kp.pt[1]), int(kp.pt[0])
             # Pick corresponding R value at nearest scale
-            R_nearest = all_responses[min(range(len(all_responses)),
-                                          key=lambda i: abs(all_responses[i][2] - kp.size/2))][0]
+            R_nearest = all_responses[
+                min(range(len(all_responses)), key=lambda i: abs(all_responses[i][2] - kp.size / 2))
+            ][0]
             kp.response = R_nearest[y, x]
             responses.append(kp.response)
-    
+
         # Sort and keep only the strongest max_kps
         keypoints = sorted(keypoints, key=lambda kp: kp.response, reverse=True)
         keypoints = keypoints[:max_kps]
@@ -206,7 +209,7 @@ def harris_laplacian_detection(
     if visualize:
         img_viz = cv2.cvtColor(gray, cv2.COLOR_GRAY2BGR)
         for kp in keypoints:
-            cv2.circle(img_viz, (int(kp.pt[0]), int(kp.pt[1])), int(kp.size/2), (0, 0, 255), 1)
+            cv2.circle(img_viz, (int(kp.pt[0]), int(kp.pt[1])), int(kp.size / 2), (0, 0, 255), 1)
         plt.imshow(cv2.cvtColor(img_viz, cv2.COLOR_BGR2RGB))
         plt.axis("off")
         plt.title("Harris–Laplacian Keypoints")
@@ -216,7 +219,7 @@ def harris_laplacian_detection(
 
 
 def dog_detection(img: np.ndarray, visualize: bool = False) -> list[cv2.KeyPoint]:
-    if (len(img.shape) > 2):
+    if len(img.shape) > 2:
         img = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
     # SIFT is DoG-based
     sift = cv2.SIFT_create()
@@ -226,6 +229,7 @@ def dog_detection(img: np.ndarray, visualize: bool = False) -> list[cv2.KeyPoint
     # plt.imshow(cv2.cvtColor(img_out, cv2.COLOR_BGR2RGB))
     # plt.axis("off")
     # plt.show()
+    keypoints = sorted(keypoints, key=lambda k: k.response, reverse=True)[:2000]
 
     return keypoints
 
@@ -255,7 +259,7 @@ def to_keypoints(points, size=3):
 
 
 def opponent_sift(image, keypoints=None, max_points=None):
-    if (len(image.shape) == 2):
+    if len(image.shape) == 2:
         image = cv2.cvtColor(image, cv2.COLOR_GRAY2BGR)
 
     img = image.astype(np.float32) / 255.0
@@ -302,7 +306,7 @@ def compute_local_descriptors(
     img: np.ndarray, keypoints: list[cv2.KeyPoint], method="SIFT"
 ) -> tuple[list[cv2.KeyPoint], np.ndarray]:
     method = method.upper()
-    
+
     descriptors = None
     if method == "SIFT":
         extractor = cv2.SIFT_create()
@@ -314,7 +318,7 @@ def compute_local_descriptors(
         _, descriptors = opponent_sift(img, keypoints)
     else:
         raise ValueError("Method must be one of: 'SIFT', 'ORB', 'COLOR-SIFT'")
-        
+
     return descriptors
 
 
@@ -372,11 +376,11 @@ def calculate_matches(
         matcher = cv2.BFMatcher(norm, crossCheck=False)
         # Use knnMatch for ratio test
         matches = None
-        if (desc1.shape[0] > desc2.shape[0]):
+        if desc1.shape[0] > desc2.shape[0]:
             matches = matcher.knnMatch(desc1, desc2, k=2)
         else:
             matches = matcher.knnMatch(desc2, desc1, k=2)
-                
+
         good_matches = []
         for match_pair in matches:
             if len(match_pair) == 2:
@@ -513,8 +517,8 @@ def keypoint_retrieval(
         else:
             for name, img_list in tqdm(query_images.items(), desc="Query images"):
                 query_descriptors[name] = [compute_descriptors_for_image(img) for img in img_list]
-        pickle.dump(query_descriptors, open(pkl_path, "wb")) 
-    
+        pickle.dump(query_descriptors, open(pkl_path, "wb"))
+
     # Perform matching and retrieval
     print(f"Performing matching and retrieval (method={matcher_method})...")
     results = {}
@@ -523,10 +527,10 @@ def keypoint_retrieval(
         for query_name, query_desc_list in query_descriptors.items():
             query_idx = query_trans_inv[query_name]
             results[query_idx] = []
-        
+
             for query_desc in query_desc_list:
                 matches_list = []
-    
+
                 for bbdd_name, bbdd_desc in bbdd_descriptors.items():
                     bbdd_idx = bbdd_trans_inv[bbdd_name]
                     n_matches, _ = calculate_matches(
@@ -537,7 +541,7 @@ def keypoint_retrieval(
                         use_ratio_test=use_ratio_test,
                     )
                     matches_list.append((n_matches, bbdd_idx))
-    
+
                 # Sort by number of matches (descending) and take top_k
                 matches_list.sort(key=lambda x: x[0], reverse=True)
                 results[query_idx].append(matches_list[:top_k])
